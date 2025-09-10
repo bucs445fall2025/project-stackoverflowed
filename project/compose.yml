@@ -1,0 +1,60 @@
+# Docker compose version
+version: "3.9"
+
+# Defining the containers 
+services:
+
+  app:
+    build: ./app # (Bind mount) Build the docker image using the dockerfile inside the app/ folder
+    ports:
+      - "3000:3000" # Expose container port 3000 to host so we can open the front end in a browser at localhost:3000
+    environment:
+      - REACT_APP_API_URL=http://api:5001 # Setting environment variablse inside the container
+    depends_on:
+      - api # Telling Docker to start the backend container list
+    volumes:
+       - ./app:/app # Mounts local app/ folder into the container at /app
+       - app_node_modules:/app/node_modules
+
+  api:
+    build: ./api # (Bind mount) Build the backend docker image using the dockerfile inside the api/ folder
+    ports:
+      - "5001:5000" # Expose container port 5001 to host
+    environment:
+      - DB_HOST=db # Backend knows how to connect to MongoDB
+      - DB_PORT=27017
+    depends_on:
+      - db # Ensure MongoDB starts first
+    volumes:
+      - ./api:/app # Mount local back end code into the container
+      - api_node_modules:/app/node_modules
+
+  db:
+    image: mongo:7 # Use version 7
+    ports:
+      - "27017:27017" # Map container port to host. Can connect with a GUI
+    volumes:
+      - mongo_data:/data/db # Persist MongoDB data outisde the container
+
+  server:
+    image: nginx:latest # Use latest version
+    ports:
+      - "80:80" # Expose Nginx on host port 80
+    depends_on:
+      - app # Wait on front end and back end to start
+      - api
+
+# Defining a named docker volume for MongoDB
+volumes:
+  mongo_data:
+  app_node_modules:
+  api_node_modules:
+
+# A Volume is a way to persist data or share files between host machine and a container, or between containers
+#   Named volume: 
+#       - Docker manages storage location, good for databases
+#       - MongoDB writes its data to /data/db inside the container, but its 
+#         stored outside the container so it wont be lost if the container get deleted
+#   Bind mount: 
+#       - Maps a folder on host to the container, good for development
+#       - Changes made to the local files are reflected in the container
