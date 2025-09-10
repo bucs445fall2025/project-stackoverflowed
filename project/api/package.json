@@ -1,0 +1,19 @@
+{
+  "name": "project-backend",
+  "version": "1.0.0",
+  "description": "Backend for the project",
+  "main": "app.js",
+  "scripts": {
+    "dev": "node app.js",
+    "start": "node app.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "mongodb": "^5.7.0"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}
