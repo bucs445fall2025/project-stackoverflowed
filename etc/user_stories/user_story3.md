@@ -1,17 +1,19 @@
-# [Feature Name]
+# [Automate resale process] 
 
 ## **User Story**
-[Write the user story using the approved format]
+As a user, 
+I want a feature to automate the resale process 
+so that it is easier to sell more products.
 
 ---
 
 ## **Acceptance Criteria**
-- [Define the success conditions for this feature]
-- [How will we know when this is done?]
-- [What must be functional before release?]
+- It's easier to sell products (takes less steps to launch a product for sale than it would manually)
+- We can list the product for sale from the website (after its been physically sent to Amazon by the user)
+- We can view existing listings
 
 ---
 
 ## **Notes**
-- [Any additional considerations or insights]
-- [Potential risks or challenges]
+- Be able to adjust prices from the websites and ads
+- Automation means decisions made by the computer without user approval, could lead to undesirable results that could be fault of the software
