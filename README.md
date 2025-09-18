@@ -1,4 +1,4 @@
-# << Project Title >>
+# << AlgoFBA >>
 ## CS 445 Final Project
 ### << 2025, Fall >>
 
@@ -6,15 +6,15 @@
 << Nicholas DeNobrega, Jackson Searles, Samuel Buckler >>
 
 ## Getting Started
-<<One paragraph of project description goes here>>
+<<This is a one-stop dashboard that disaplys information about a users Amazon FBA account, including sales, inventory, and recommendations on making changes that improve a users monthly ROI. Enables the ability for users to make changes to their store directly from the website. There is also general information about what products to sell based on what is currently selling, number of competitors, seasonality, and niche categories preferred by the user. >>
 
 ### Roadmap
   <<
 A list of features, function or non-functional, you would like to add in the future if you had time, i.e. Phase 2 stuff
-- [ ] Add Changelog
-- [ ] Add back to top links
-- [ ] Add Additional Templates w/ Examples
-- [ ] Add "components" document to easily copy & paste sections of the readme
+- [ ] See top products for a given category
+- [ ] Personalize UI with modular components, changing positioning and size of differnet blocks/windows
+- [ ] AI assistant that humanizes information, potentially with a chatbot
+- [ ] Log into user's Amazon FBA account
   >>
   
 ## SRS

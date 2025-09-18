@@ -1,6 +1,6 @@
 ## Client Meeting Notes
 
-**Project Name:** [Your Project Name]
+**Project Name:** [AlgoFBA]
 **Date:** [09/18/2025]
 **Client Name:** [Samuel Buckler]
 **Interviewed By:** [Nicholas Denobrega, Jackson Searles]
