@@ -1,9 +1,9 @@
 # << Project Title >>
 ## CS 445 Final Project
-### << Semester, Year >>
+### << 2025, Fall >>
 
-### Team: << team name >>
-<< List Team Members >>
+### Team: << StackOverflowed >>
+<< Nicholas DeNobrega, Jackson Searles, Samuel Buckler >>
 
 ## Getting Started
 <<One paragraph of project description goes here>>
@@ -18,7 +18,7 @@ A list of features, function or non-functional, you would like to add in the fut
   >>
   
 ## SRS
-[document](url to google doc)
+[document](https://docs.google.com/document/d/15y3vkviB_1BUkphhSxDoqrQBPmNhA0pVMGzw64uRa-Y/edit?tab=t.0)
   
 ### Prerequisites
 * [Docker](https://www.docker.com/)
