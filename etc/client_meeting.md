@@ -1,18 +1,19 @@
 ## Client Meeting Notes
 
 **Project Name:** [Your Project Name]
-**Date:** [MM/DD/YYYY]
-**Client Name:** [Client’s Name]
-**Interviewed By:** [Your Name(s)]
+**Date:** [09/18/2025]
+**Client Name:** [Samuel Buckler]
+**Interviewed By:** [Nicholas Denobrega, Jackson Searles]
 
 ---
 
 ### **Client Overview**
 - **Brief description of the client and their background:**
-  (Example: Kevin is a Dungeon Master who wants a tool to help manage his D&D campaigns.)
+  Reseller on Amazon FBA
 
 - **Client’s main goal for the software:**
-  (Example: The tool should help track player turns, roll dice automatically, and send notifications.)
+  The clients main goal is to improve the outcome of reselling on Amazon's FBA, and potentially automate
+  some processes in the reselling of products through FBA
 
 ---
 
@@ -20,103 +21,92 @@
 
 #### **1. What are the costs vs. budget?**
 **Client’s Response:**
-(Example: "I don’t want to spend much, ideally free, but I’d consider paying a one-time fee.")
+The payment is a portion of the profits made using the software, and payment is contingent on it working
 
 **Clarification & Notes:**
-(Example: The client is looking for a free tool but may accept optional paid features.)
+Client is ideally looking for a free tool to use to maxamize profits
 
 ---
 
 #### **2. What is the timeframe for this project?**
 **Client’s Response:**
-(Example: "I need this ready before my next campaign starts in three months.")
+Wants at least a MVP (mimimum Viable Product) within the next 2 months, with hope for improvement beyond that
 
 **Clarification & Notes:**
-(Example: A strict deadline, must focus on core features first.)
+Focus on core features first, such as UI to display important information, then can improve on other features
 
 ---
 
 #### **3. What problem are you trying to solve?**
 **Client’s Response:**
-(Example: "Managing initiative order and tracking actions is too slow.")
-
-**Clarification & Notes:**
-- The real problem is **speed and efficiency** during gameplay, not just "initiative tracking."
-- Consider features like **automation** and **UI improvements** to streamline this.
+Wants to increase monthly ROI, make the process of reselling simpler with an automated tool, and have helpful UI 
 
 ---
 
 #### **4. What is the most important feature?**
 **Client’s Response:**
-(Example: "Initiative tracking needs to be easy and automatic.")
+The UI displays important information about products like which ones are worth reselling, hot products, etc
 
 **Clarification & Notes:**
-- This feature should be the **core focus** of the software.
-- Other features (e.g., dice rolling) are secondary.
+The info displayed on the UI should be one of the core components of the software
 
 ---
 
 #### **5. Is there a similar product on the market?**
 **Client’s Response:**
-(Example: "Yes, but they are either too complex or too expensive.")
+Yes, Helium10 is one of the most similar products out there right now
 
 **Clarification & Notes:**
-- Competitor analysis needed.
-- Find a way to differentiate: **Simpler UI? Free version? Customizable?**
+Should analyze types of data and UI Helium10 is using to compare with
 
 ---
 
 #### **6. Are there any existing products or technologies that will need to be integrated?**
 **Client’s Response:**
-(Example: "It would be nice if it worked with Roll20 or D&D Beyond.")
+Yes, it should integrate with Amazon FBA
 
 **Clarification & Notes:**
-- Check for **APIs** for possible integrations.
-- Consider a **manual import/export** feature if full integration isn’t feasible.
+Have to integrate the Amazon FBA API to "scrape"
 
 ---
 
 #### **7. What does success look like for this project?**
 **Client’s Response:**
-(Example: "If my players can see whose turn it is without me saying anything, that’s a win.")
+Sucess looks like $$$$$$$$$ in my account
 
-**Clarification & Notes:**
-- Focus on **visual clarity and notifications**.
 
 ---
 
 #### **8. What risks are associated with a malicious user?**
 **Client’s Response:**
-(Example: "Not much, unless players try to cheat dice rolls.")
+Possibly non-Amazon FBA users trying to use the service, since you must be a verified reseller to sell on Amazon FBA
 
-**Clarification & Notes:**
-- Consider **server-side dice validation** to prevent cheating.
 
 ---
 
 #### **9. What is the expected lifetime of this software?**
 **Client’s Response:**
-(Example: "I want to use it for many campaigns, so it should last for years.")
+I want it to last forever
 
 **Clarification & Notes:**
-- Future **maintenance and updates** should be considered.
+Must maintaing and update product if Amazon FBA and its API changes
 
 ---
 
 #### **10. What additional features would you like?**
 **Client’s Response:**
-(Example: "A way to send private messages to players would be cool.")
+A way for software to "message" or email me with real time updates of things like pricing information, a new hot product, etc
 
 **Clarification & Notes:**
-- Nice-to-have, but **not essential** for version 1.
+If we ever get to this point
 
 ---
 
 ## **Key Takeaways & Next Steps**
-- **Most important feature:** Initiative tracking
-- **Secondary features:** Dice rolling, notifications, private messaging
-- **Deadline:** 3 months
-- **Risks:** Potential cheating in dice rolls
+- **Most important feature:** Interactive UI that displays valuable FBA information, and an automation of reselling on FBA
+- **Secondary features:** Machine learning to improve these things, daily message/email
+- **Deadline:** 2 months
+- **Risks:** 
 
 ### **Next Steps:**
 ✅ Prioritize initiative tracking
@@ -126,5 +116,5 @@
 ---
 
 ### **Signatures**
-(Client) **[Client’s Name]** – *Reviewed & Approved*
-(Developer) **[Your Name]** – *Re
+(Client) **[Samuel Buckler]** – *Reviewed & Approved*
+(Developer) **[Nicholas DeNobrega, Jackson Searles]** – *Re

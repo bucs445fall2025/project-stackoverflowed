@@ -1,17 +1,17 @@
 # [Feature Name]
 
 ## **User Story**
-[Write the user story using the approved format]
+As a user,
+I want to be able to see how my resell products are doing
+so that I can make changes/improvements based on how there doing.
 
 ---
 
 ## **Acceptance Criteria**
-- [Define the success conditions for this feature]
-- [How will we know when this is done?]
-- [What must be functional before release?]
+- [Sucess conditions would mean there is some automation on managing the listings, pricing, inventory, etc]
+- [Would know this is done if our software can sucesfully update things automatically such as pricing]
+- [Must be able to access the products being sold by user]
 
 ---
 
 ## **Notes**
-- [Any additional considerations or insights]
-- [Potential risks or challenges]
