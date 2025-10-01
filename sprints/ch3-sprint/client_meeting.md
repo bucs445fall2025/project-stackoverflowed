@@ -6,9 +6,12 @@
 
 ## Requirements Attempted in next Sprint
 
-
+- Log into Amazon User Account successfully
+  - via Amazon API 
+  
 ## Milestone Status (Pass/Fail)
 
+Pass
 
 ## Requested Changes
 
