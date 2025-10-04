@@ -20,6 +20,9 @@ services:
     build: ./api # (Bind mount) Build the backend docker image using the dockerfile inside the api/ folder
     ports:
       - "5001:5000" # Expose container port 5001 to host
+                    # Syntax: HostPort:ContainerPort
+                    # Host port is the port that'll be open in the browser/host machine
+                    # The port the app is listening on inside the container
     environment:
       - DB_HOST=db # Backend knows how to connect to MongoDB
       - DB_PORT=27017
