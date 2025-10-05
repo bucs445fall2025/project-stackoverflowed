@@ -1,6 +1,9 @@
 # app/Dockerfile
 
 # --- build stage ---
+
+RUN echo ">>> BUILDING APP/Dockerfile WITH NODE 20 <<<"
+
 FROM node:20-alpine AS builder
 WORKDIR /app
 ENV NODE_ENV=production
