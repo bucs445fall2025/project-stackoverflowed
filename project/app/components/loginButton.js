@@ -1,11 +1,7 @@
-import { useRouter } from 'next/router'; // "router hook" lets you to navigate between pages
-
 export default function LoginButton() {
-    const router = useRouter();
-
     const handleClick = () => {
-        // Reroute to the loginPage
-        router.push('/loginPage');
+        // Redirect user straight to the backend login route
+        window.location.href = `${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/login`;
     };
 
     return (
@@ -23,7 +19,7 @@ export default function LoginButton() {
                 fontFamily: 'Arial, sans-serif'
             }}
         >
-            Log In
+            Log In with Amazon
         </button>
     );
 }

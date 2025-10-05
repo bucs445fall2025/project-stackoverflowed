@@ -1,54 +1,72 @@
+// app.js
 const express = require('express');
 const cors = require('cors');
+const axios = require('axios');
+require('dotenv').config();
+
 const app = express();
-const port = 5001;
 
-const axios = require('axios'); // Make axios is installed: npm install axios
-require('dotenv').config(); // To load Client ID / Secret from .env
-
-app.use(cors());
+// Allow your frontend (keep * while testing)
+app.use(cors({ origin: '*' }));
 app.use(express.json());
 
-app.get('/', (req, res) => {
-  res.send('Hello from backend');
+// ✅ Use Railway's dynamic port (fallback for local)
+const port = process.env.PORT || 8080;
+
+// Health check
+app.get('/', (_req, res) => res.send('Hello from backend'));
+
+// ---------- LWA STEP 1: send user to Amazon ----------
+app.get('/auth/login', (req, res) => {
+  const state = Math.random().toString(36).slice(2); // TODO: store/verify in prod
+
+  const params = new URLSearchParams({
+    response_type: 'code',
+    client_id: process.env.AMAZON_CLIENT_ID || '',
+    scope: 'profile', // add extra scopes if needed
+    redirect_uri: process.env.AMAZON_REDIRECT_URI || '',
+    state
+  });
+
+  const authorizeUrl = `https://www.amazon.com/ap/oa?${params.toString()}`;
+  return res.redirect(authorizeUrl);
 });
 
-app.listen(port, () => {
-  console.log(`Backend running on port ${port}`);
-});
+// ---------- LWA STEP 2: Amazon redirects here with ?code=... ----------
+app.get('/auth/callback', async (req, res) => {
+  // Amazon sends ?code=... (&state=..., &error=...)
+  const { code, state, error } = req.query;
+  if (error) return res.status(400).send(`Amazon error: ${error}`);
+  if (!code) return res.status(400).send('No auth code provided');
 
-// A GET route called by Amazon after the user logs in and authorizes our app to get data from their account
-app.get('/auth/callback', async (req, res) => { // 'async' allows us to use 'await' to make HTTP requests to Amazon
-  // Extracts authorization code (spapi_oauth_code) from the query string in the URL
-  const { spapi_oauth_code } = req.query;
-
-  // Makes sure Amazon sent the code
-  if (!spapi_oauth_code) {
-    return res.status(400).send('No auth code provided');
-  }
-
-  // Sends a POST request to Amazons LWA token endpoint
-  // Exchanges the temporary spapi_oauth_code for real access and refresh tokens
   try {
-    const response = await axios.post('https://api.amazon.com/auth/o2/token', null, {
-      params: {
-        grant_type: 'authorization_code', // Tells Amazon we're using the standard OAuth flow
-        code: spapi_oauth_code, // The temporary auth code recieved
-        client_id: process.env.AMAZON_CLIENT_ID, // Identifies our app from Mikes account
-        client_secret: process.env.AMAZON_CLIENT_SECRET, // Identifies our app from Mikes account
-        redirect_uri: 'http://localhost:3000/dashboard', // Must match whats registered in Seller Central
-      },
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
-      }
+    // Exchange code for tokens (must be x-www-form-urlencoded body)
+    const body = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code,
+      client_id: process.env.AMAZON_CLIENT_ID || '',
+      client_secret: process.env.AMAZON_CLIENT_SECRET || '',
+      redirect_uri: process.env.AMAZON_REDIRECT_URI || '' // MUST exactly match what you used in /auth/login and in Seller Central
     });
 
-    // Logs access and refresh tokens returned by Amazon
-    console.log('Tokens received:', response.data); 
-    res.send('Login successful! You can close this window.');
+    const tokenRes = await axios.post(
+      'https://api.amazon.com/auth/o2/token',
+      body.toString(),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
 
+    // access_token, refresh_token, token_type, expires_in
+    console.log('Tokens received:', tokenRes.data);
+
+    // TODO: persist refresh_token securely (DB). For now, send user to your dashboard.
+    const frontend = process.env.FRONTEND_URL || 'http://localhost:3000';
+    return res.redirect(`${frontend}/dashboard`);
   } catch (err) {
-    console.error('Error exchanging auth code:', err.response?.data || err.message);
-    res.status(500).send('Error exchanging auth code');
+    console.error('Error exchanging code:', err.response?.data || err.message);
+    return res.status(500).send('Error exchanging auth code');
   }
+});
+
+app.listen(port, '0.0.0.0', () => {
+  console.log(`Backend running on port ${port}`);
 });
