@@ -1,4 +1,6 @@
-# Build stage
+# app/Dockerfile
+
+# --- build stage ---
 FROM node:20-alpine AS builder
 WORKDIR /app
 ENV NODE_ENV=production
@@ -7,18 +9,17 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-# Runtime stage
+# --- runtime stage ---
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-# copy only what's needed to run
 COPY package*.json ./
 RUN npm ci --omit=dev
+# copy Next build output
 COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/next.config.js ./next.config.js
+# (no public/ copy needed)
 
-# Railway sets PORT; default to 3000 locally
+# Railway provides PORT
 ENV PORT=3000
 EXPOSE 3000
 CMD ["npm", "start"]
