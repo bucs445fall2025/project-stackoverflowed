@@ -1,20 +1,24 @@
-# Use Node 18
-FROM node:18-alpine
-
-# Set working directory
+# Build stage
+FROM node:20-alpine AS builder
 WORKDIR /app
-
-# Copy package.json and package-lock.json first
+ENV NODE_ENV=production
 COPY package*.json ./
-
-# Install dependencies
-RUN npm install
-
-# Copy the rest of the frontend
+RUN npm ci
 COPY . .
+RUN npm run build
 
-# Expose port 3000 for Next.js dev server
+# Runtime stage
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+# copy only what's needed to run
+COPY package*.json ./
+RUN npm ci --omit=dev
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/next.config.js ./next.config.js
+
+# Railway sets PORT; default to 3000 locally
+ENV PORT=3000
 EXPOSE 3000
-
-# Start Next.js
-CMD ["npm", "run", "dev"]
+CMD ["npm", "start"]
