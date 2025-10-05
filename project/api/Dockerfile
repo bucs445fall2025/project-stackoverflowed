@@ -1,20 +1,18 @@
-# Use Node 18
-FROM node:18-alpine
-
-# Set working directory
+# --- runtime-only, JS (no build step) ---
+FROM node:20-alpine AS runner
 WORKDIR /app
+ENV NODE_ENV=production
 
-# Copy package.json and package-lock.json first (for caching)
+# install only production deps
 COPY package*.json ./
+RUN npm ci --omit=dev
 
-# Install dependencies
-RUN npm install
-
-# Copy the rest of the app
+# copy source (JS files, not TS)
 COPY . .
 
-# Expose port 
-EXPOSE 5000
+# Railway injects PORT; default for local
+ENV PORT=8080
+EXPOSE 8080
 
-# Run app
-CMD ["npm", "run", "dev"]
+# Use your start script (NOT dev)
+CMD ["npm", "start"]
