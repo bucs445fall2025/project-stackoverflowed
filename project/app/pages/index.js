@@ -27,9 +27,6 @@ export default function Home() {
             <h5>(These two sets of buttons are functionally the same. Will obviously scrap one of them)</h5>
             <SignUpButton />
             <LoginButton />
-
-            <NavigationButton label="Sign Up (nav)" route="/signUpPage" />
-            <NavigationButton label="Log In (nav)" route="/loginPage" />
         </div>
     );
 }
