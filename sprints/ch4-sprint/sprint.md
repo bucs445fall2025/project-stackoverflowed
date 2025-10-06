@@ -14,6 +14,7 @@ _note: replace anything surrounded by << >> and **remove** the << >>_
 
 N/A: Havent Updated SRS section yet
 
+
 ### User Story
 
 ALligns with User_story2 in terms of about the user being able to see there products and how there being sold etc.
