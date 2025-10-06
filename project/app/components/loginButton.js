@@ -1,7 +1,7 @@
 export default function LoginButton() {
     const handleClick = () => {
         // Redirect user straight to the backend login route
-        window.location.href = 'https://www.amazon.com/ap/oa?response_type=code&client_id=amzn1.application-oa2-client.d4e8370b24484d7983257733c3a721c1&scope=profile&redirect_uri=https%3A%2F%2Ffeisty-renewal-production.up.railway.app%2Fauth%2Fcallback&state=rz9bcweseq'
+        window.location.href = 'https://feisty-renewal-production.up.railway.app/auth/login'
     };
 
     return (
