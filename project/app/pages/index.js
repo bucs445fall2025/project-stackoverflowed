@@ -1,13 +1,8 @@
 import LoginButton from '../components/loginButton';
 import SignUpButton from '../components/signUpButton';
 
-// might not use this
-import NavigationButton from '../components/navigationButton';
-
-
 /*  
     Public-facing home page
-    Maybe not necessary
     This is what Next.js renders when user visits '/'
 */
 export default function Home() {
@@ -24,7 +19,6 @@ export default function Home() {
             </h2>
             <h3>Landing page for the site, gives info about the site for first time visitors</h3>
 
-            <h5>(These two sets of buttons are functionally the same. Will obviously scrap one of them)</h5>
             <SignUpButton />
             <LoginButton />
         </div>
