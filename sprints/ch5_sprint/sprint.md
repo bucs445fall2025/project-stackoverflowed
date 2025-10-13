@@ -27,7 +27,7 @@ Hosted website on Railway
 
 ### Completed Requirements
 
-Gained access to the users FBA account product information through Amazon's Selling Partner-API (SP-API). Created a back-end route to fetch product listings from users FBA account, then sends the data to a React component, which is used on the dashboard page to display the users data.
+Gained access to the users FBA account product information through Amazon's Selling Partner-API (SP-API). Created a back-end route to fetch product listings from users FBA account, then sends the data to a React component, which is used on the dashboard page to display the users data. Sucessfully hosted api backend and app frontend containers on Railway
 
 ### Incomplete Requirements
 
