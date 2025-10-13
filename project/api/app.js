@@ -84,6 +84,7 @@ app.get('/auth/callback', async (req, res) => {
 
     // pick first marketplace sellerId for example
     sellerId = sellerRes.data.payload[0].sellerId;
+    const marketplaceId = sellerRes.data.payload[0].marketplace.id;
 
     // TODO: persist refresh_token securely (DB). For now, send user to your dashboard.
     const frontend = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -105,7 +106,7 @@ app.get('/spapi/products', async (req, res) => {
   try {
     // Listings Items API: get all listings for this seller
     const response = await axios.get(
-      `https://sellingpartnerapi-na.amazon.com/listings/2021-08-01/items/${sellerId}`,
+      `https://sellingpartnerapi-na.amazon.com/listings/2021-08-01/items/${sellerId}?marketplaceIds=${marketplaceId}`,
       {
         headers: {
           'Authorization': `Bearer ${currentAccessToken}`,
