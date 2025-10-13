@@ -14,6 +14,9 @@ app.use(express.json());
 // Uses Railway's provided port or uses 8080 for local development
 const port = process.env.PORT || 8080;
 
+let currentAccessToken = null;
+let sellerId = null;
+
 // GET endpoint so we can verify the backend is running
 app.get('/', (_req, res) => res.send('Hello from backend'));
 
@@ -65,8 +68,22 @@ app.get('/auth/callback', async (req, res) => {
       { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
     );
 
+    // need to change this in the future and link to users FBAlgo account
+    currentAccessToken = tokenRes.data.access_token;
+
+    // may need to call Sellers API to get the sellerId
+    const sellerRes = await axios.get(
+      'https://sellingpartnerapi-na.amazon.com/sellers/v1/marketplaceParticipations',
+      {
+        headers: { 'Authorization': `Bearer ${currentAccessToken}` }
+      }
+    );
+
     // access_token, refresh_token, token_type, expires_in
     console.log('Tokens received:', tokenRes.data);
+
+    // pick first marketplace sellerId for example
+    sellerId = sellerRes.data.payload[0].sellerId;
 
     // TODO: persist refresh_token securely (DB). For now, send user to your dashboard.
     const frontend = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -79,7 +96,35 @@ app.get('/auth/callback', async (req, res) => {
   }
 });
 
-// Start up the Express server
-app.listen(port, '0.0.0.0', () => {
-  console.log(`Backend running on port ${port}`);
+// endpoint to fetch SP-API data
+app.get('/spapi/products', async (req, res) => {
+  if (!currentAccessToken || !sellerId) {
+    return res.status(401).json({ error: 'User not logged in' });
+  }
+
+  try {
+    // Listings Items API: get all listings for this seller
+    const response = await axios.get(
+      `https://sellingpartnerapi-na.amazon.com/listings/2021-08-01/items/${sellerId}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${currentAccessToken}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    res.json(response.data);
+  } catch (err) {
+    console.error(err.response?.data || err.message);
+    res.status(500).json({ error: 'Failed to fetch products' });
+  }
 });
+
+app.listen(PORT, () => console.log(`API running on http://localhost:${PORT}`));
+
+// Start up the Express server
+// Shoudlnt need this anymore
+// app.listen(port, '0.0.0.0', () => {
+//   console.log(`Backend running on port ${port}`);
+// });
