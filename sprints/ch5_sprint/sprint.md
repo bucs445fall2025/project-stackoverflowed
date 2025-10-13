@@ -23,6 +23,7 @@ Worked towards story 2, to be able to see users product information on the dashb
 ### Sprint Requirements Attempted
 
 Access data from users Amazon account
+Hosted website on Railway
 
 ### Completed Requirements
 
