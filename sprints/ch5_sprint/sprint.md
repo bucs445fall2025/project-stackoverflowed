@@ -30,7 +30,6 @@ Gained access to the users FBA account product information through Amazon's Sell
 
 ### Incomplete Requirements
 
-We were not able to finish the Software Architecture Diagram in time. We began working on it, but it remains uncompleted
 
 ### The summary of the entire project
 
