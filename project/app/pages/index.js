@@ -19,7 +19,7 @@ export default function Home() {
             </h2>
             <h3>Landing page for the site, gives info about the site for first time visitors</h3>
             
-            <h3>TESTING123</h3>
+            <h3>TESTING1234</h3>
 
             <SignUpButton />
             <LoginButton />
