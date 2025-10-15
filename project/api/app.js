@@ -122,7 +122,7 @@ app.get('/spapi/products', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => console.log(`API running on http://localhost:${PORT}`));
+app.listen(port, () => console.log(`API running on http://localhost:${port}`));
 
 // Start up the Express server
 // Shoudlnt need this anymore

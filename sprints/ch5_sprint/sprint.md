@@ -23,14 +23,14 @@ Worked towards story 2, to be able to see users product information on the dashb
 ### Sprint Requirements Attempted
 
 Access data from users Amazon account
+Hosted website on Railway
 
 ### Completed Requirements
 
-Gained access to the users FBA account product information through Amazon's Selling Partner-API (SP-API). Created a back-end route to fetch product listings from users FBA account, then sends the data to a React component, which is used on the dashboard page to display the users data.
+Gained access to the users FBA account product information through Amazon's Selling Partner-API (SP-API). Created a back-end route to fetch product listings from users FBA account, then sends the data to a React component, which is used on the dashboard page to display the users data. Sucessfully hosted api backend and app frontend containers on Railway
 
 ### Incomplete Requirements
 
-We were not able to finish the Software Architecture Diagram in time. We began working on it, but it remains uncompleted
 
 ### The summary of the entire project
 
