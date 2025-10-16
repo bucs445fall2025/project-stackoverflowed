@@ -1,68 +1,79 @@
+// pages/index.js (Next.js Pages Router)
+// or app/page.js if you’re using the App Router
+
 import LoginButton from '../components/loginButton';
 import SignUpButton from '../components/signUpButton';
+import StarsBackground from '../components/StarsBackground';
 
 export default function Home() {
   return (
-    <div className="home-container">
-      <h1 className="home-title">Welcome to FBAlgo</h1>
-      
-      <div className="button-group">
-        <LoginButton />
-        <SignUpButton />
-      </div>
+    <div className="home-wrap">
+      {/* starfield behind everything */}
+      <StarsBackground count={240} />
+
+      <main className="content">
+        <h1 className="home-title">Welcome to FBAlgo</h1>
+
+        <div className="button-group">
+          <LoginButton />
+          <SignUpButton />
+        </div>
+      </main>
 
       <style jsx>{`
-        .home-container {
-          height: 100vh;
+        .home-wrap {
+          position: relative;
+          min-height: 100vh;
+          background: #2c003e; /* deep purple */
+          display: grid;
+          place-items: center;
+          overflow: hidden;
+        }
+        .content {
+          position: relative;
+          z-index: 1; /* sit above stars */
           display: flex;
           flex-direction: column;
-          justify-content: center;
           align-items: center;
-          background-color: #2c003e; /* deep purple */
+          gap: 1.25rem;
           text-align: center;
           padding: 2rem;
         }
-
         .home-title {
-          font-size: 2.5rem;
+          color: #fff;
           font-weight: 600;
-          color: white;
-          margin-bottom: 3rem;
+          font-size: clamp(2rem, 3.5vw, 3rem);
+          letter-spacing: 0.5px;
+          margin-bottom: 0.75rem;
+          text-shadow: 0 2px 24px rgba(0,0,0,0.35);
         }
-
         .button-group {
           display: flex;
           flex-direction: column;
-          gap: 1rem;
           align-items: center;
+          gap: 0.5rem;
         }
-
-        /* Style for login button */
+        /* Login button styling */
         .button-group :global(button) {
-          background-color: #ff9900; /* Amazon orange for login */
-          color: white;
+          background: #ff9900;
+          color: #111;
           border: none;
-          padding: 12px 24px;
-          border-radius: 6px;
-          font-size: 1rem;
+          padding: 12px 20px;
+          border-radius: 10px;
+          font-weight: 600;
           cursor: pointer;
-          transition: background 0.3s ease;
+          transition: transform .08s ease;
         }
-
         .button-group :global(button:hover) {
-          background-color: #e68a00;
+          transform: translateY(-1px);
         }
-
-        /* Style for sign-up as a link */
+        /* Sign-up styled as hyperlink */
         .button-group :global(a),
         .button-group :global(.signup-link) {
-          color: white;
-          font-size: 1rem;
+          color: #fff;
           text-decoration: underline;
-          cursor: pointer;
-          background: none;
-          border: none;
-          padding: 0;
+          font-weight: 500;
+          opacity: 0.95;
         }
       `}</style>
     </div>
