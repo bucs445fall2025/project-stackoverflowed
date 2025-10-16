@@ -7,47 +7,66 @@ const aws4 = require('aws4');
 require('dotenv').config();
 
 const app = express();
-app.use(cors({ origin: '*' }));
 app.use(express.json());
 
-// Bind 0.0.0.0 for Railway/Docker, fall back for local
-const port = process.env.PORT || 8080;
+// CORS (dev-friendly; tighten later)
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || '*', // e.g. https://your-frontend.com
+    credentials: false,                      // we're not using cookies yet
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-amz-access-token', 'x-requested-with'],
+  })
+);
 
-let currentAccessToken = null;   // LWA access token (short-lived)
-let refreshToken = null;         // save this in DB later
+// --- Config ---
+const port = process.env.PORT || 8080;
+const FRONTEND = process.env.FRONTEND_URL || 'http://localhost:3000';
+const LWA_CLIENT_ID = process.env.AMAZON_CLIENT_ID || '';
+const LWA_CLIENT_SECRET = process.env.AMAZON_CLIENT_SECRET || '';
+const REDIRECT_URI = process.env.AMAZON_REDIRECT_URI || ''; // must exactly match app registration
+
+// --- In-memory (replace with DB in prod) ---
+let refreshToken = null;          // long-lived; store securely
+let currentAccessToken = null;    // short-lived
+let accessTokenExpiresAt = 0;     // epoch ms
 let sellerId = null;
-let marketplaceId = null;        // must be module-scoped so other routes can use it
+let marketplaceId = null;
 
 // Health check
-app.get('/', (_req, res) => res.send('Hello from backend (sandbox)'));
+app.get('/', (_req, res) => res.send('Hello from backend (sandbox SP-API with consent flow)'));
 
-// ---------- LWA STEP 1 ----------
+// ---------- STEP 1: Send seller to Seller Central consent ----------
 app.get('/auth/login', (_req, res) => {
-  const state = Math.random().toString(36).slice(2); // TODO: store/verify in prod
-  const params = new URLSearchParams({
-    response_type: 'code',
-    client_id: process.env.AMAZON_CLIENT_ID || '',
-    scope: 'profile',                // add more if you need
-    redirect_uri: process.env.AMAZON_REDIRECT_URI || '',
-    state
-  });
-  res.redirect(`https://www.amazon.com/ap/oa?${params.toString()}`);
+  const state = Math.random().toString(36).slice(2); // TODO: persist/verify in production
+
+  // US Seller Central. Use regional domain if appropriate for your account:
+  // EU: https://sellercentral-europe.amazon.com
+  // FE: https://sellercentral.amazon.com (with correct region)
+  const consentUrl = new URL('https://sellercentral.amazon.com/apps/authorize/consent');
+  consentUrl.search = new URLSearchParams({
+    application_id: LWA_CLIENT_ID,   // your LWA client id
+    redirect_uri: REDIRECT_URI,      // must exactly match registration
+    state,
+  }).toString();
+
+  return res.redirect(consentUrl.toString());
 });
 
-// ---------- LWA STEP 2 ----------
+// ---------- STEP 2: Callback receives ?spapi_oauth_code=... ----------
 app.get('/auth/callback', async (req, res) => {
-  const { code, error } = req.query;
+  const { spapi_oauth_code, state, error } = req.query;
   if (error) return res.status(400).send(`Amazon error: ${error}`);
-  if (!code) return res.status(400).send('No auth code provided');
+  if (!spapi_oauth_code) return res.status(400).send('No spapi_oauth_code provided');
 
   try {
-    // Exchange code for tokens
+    // Exchange SP-API oauth code for refresh_token (+ optional access_token)
     const body = new URLSearchParams({
       grant_type: 'authorization_code',
-      code,
-      client_id: process.env.AMAZON_CLIENT_ID || '',
-      client_secret: process.env.AMAZON_CLIENT_SECRET || '',
-      redirect_uri: process.env.AMAZON_REDIRECT_URI || ''
+      code: spapi_oauth_code,
+      client_id: LWA_CLIENT_ID,
+      client_secret: LWA_CLIENT_SECRET,
+      redirect_uri: REDIRECT_URI,
     });
 
     const tokenRes = await axios.post(
@@ -56,24 +75,48 @@ app.get('/auth/callback', async (req, res) => {
       { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
     );
 
-    currentAccessToken = tokenRes.data.access_token;
-    refreshToken = tokenRes.data.refresh_token; // TODO: persist securely
+    // Persist these (DB in real app)
+    refreshToken = tokenRes.data.refresh_token || refreshToken;
+    currentAccessToken = tokenRes.data.access_token || null;
+    accessTokenExpiresAt = currentAccessToken
+      ? Date.now() + ((tokenRes.data.expires_in || 3600) - 60) * 1000 // -60s buffer
+      : 0;
 
-    // ✅ Redirect immediately; don't block on SP-API calls here
-    const frontend = process.env.FRONTEND_URL || 'http://localhost:3000';
-    return res.redirect(`${frontend}/dashboard`);
+    // Redirect to dashboard now that consent is complete
+    return res.redirect(`${FRONTEND}/dashboard`);
   } catch (err) {
     console.error('Token exchange failed:', err.response?.status, err.response?.data || err.message);
-    return res.status(500).send('Error exchanging auth code');
+    return res.status(500).send('Error exchanging spapi_oauth_code');
   }
 });
 
-/**
- * Helper to sign and GET an SP-API endpoint (sandbox)
- */
+// ---------- Helper: mint a fresh access token from the refresh token ----------
+async function getAccessTokenFromRefresh() {
+  if (!refreshToken) throw new Error('No refresh token (seller hasn’t granted consent yet)');
+  // Reuse if not expired
+  if (currentAccessToken && Date.now() < accessTokenExpiresAt) return currentAccessToken;
+
+  const body = new URLSearchParams({
+    grant_type: 'refresh_token',
+    refresh_token: refreshToken,
+    client_id: LWA_CLIENT_ID,
+    client_secret: LWA_CLIENT_SECRET,
+  });
+
+  const r = await axios.post('https://api.amazon.com/auth/o2/token', body.toString(), {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  });
+
+  currentAccessToken = r.data.access_token;
+  accessTokenExpiresAt = Date.now() + ((r.data.expires_in || 3600) - 60) * 1000; // buffer
+  return currentAccessToken;
+}
+
+// ---------- Helper: signed GET to SP-API (sandbox) ----------
 async function signedGetSandbox(path, accessToken) {
-  const host = 'sandbox.sellingpartnerapi-na.amazon.com'; // 👈 sandbox host (NA)
+  const host = 'sandbox.sellingpartnerapi-na.amazon.com'; // NA sandbox
   const region = 'us-east-1';
+
   const reqOpts = {
     host,
     path,
@@ -82,58 +125,62 @@ async function signedGetSandbox(path, accessToken) {
     region,
     headers: {
       'x-amz-access-token': accessToken,
-      'user-agent': 'StackOverflowed-App/0.1 (Language=Node)'
-    }
+      'user-agent': 'StackOverflowed-App/0.1 (Language=Node)',
+    },
   };
-  aws4.sign(reqOpts); // uses AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY from env
+
+  // Sign with your IAM creds from env: AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+  aws4.sign(reqOpts);
   const url = `https://${host}${path}`;
   const httpsAgent = new https.Agent({ keepAlive: true });
   const { data } = await axios.get(url, { headers: reqOpts.headers, httpsAgent });
   return data;
 }
 
-/**
- * Quick sandbox check: fetch mock marketplace participations
- * (Also grabs sellerId & marketplaceId for later.)
- */
+// ---------- Probe seller + marketplace (also primes sellerId/marketplaceId) ----------
 app.get('/spapi/sandbox-check', async (_req, res) => {
-  if (!currentAccessToken) return res.status(401).json({ error: 'Login first via /auth/login' });
   try {
-    const data = await signedGetSandbox('/sellers/v1/marketplaceParticipations', currentAccessToken);
+    const token = await getAccessTokenFromRefresh(); // ensure valid access token
+    const data = await signedGetSandbox('/sellers/v1/marketplaceParticipations', token);
 
-    // These fields vary in sandbox; adapt if structure differs
     const first = data?.payload?.[0];
     if (first) {
       sellerId = first.sellerId || sellerId;
-      // marketplace object can be { id: 'ATVPDKIKX0DER', name: 'Amazon.com' } in NA
-      marketplaceId = (first.marketplace && (first.marketplace.id || first.marketplace.marketplaceId)) || marketplaceId;
+      // marketplace object sometimes { id: 'ATVPDKIKX0DER' }
+      marketplaceId =
+        (first.marketplace && (first.marketplace.id || first.marketplace.marketplaceId)) || marketplaceId;
     }
 
     res.json({ ok: true, data, sellerId, marketplaceId });
   } catch (err) {
-    console.error('Sandbox check failed:', err.response?.status, err.response?.data || err.message);
-    res.status(500).json({ error: 'Sandbox call failed', detail: err.response?.data || err.message });
+    const detail = err.response?.data || err.message;
+    console.error('Sandbox check failed:', err.response?.status, detail);
+    res.status(500).json({ error: 'Sandbox call failed', detail });
   }
 });
 
-/**
- * Example sandbox "products" route — uses Listings Items in sandbox.
- * Note: sandbox data is canned; this is mainly to prove signing+headers.
- */
+// ---------- Example listings call (sandbox) ----------
 app.get('/spapi/products', async (_req, res) => {
-  if (!currentAccessToken) return res.status(401).json({ error: 'Login first' });
-  if (!sellerId || !marketplaceId) return res.status(400).json({ error: 'Run /spapi/sandbox-check first to set sellerId/marketplaceId' });
-
   try {
-    const path = `/listings/2021-08-01/items/${encodeURIComponent(sellerId)}?marketplaceIds=${encodeURIComponent(marketplaceId)}`;
-    const data = await signedGetSandbox(path, currentAccessToken);
+    if (!sellerId || !marketplaceId) {
+      return res.status(400).json({ error: 'Run /spapi/sandbox-check first to set sellerId/marketplaceId' });
+    }
+
+    const token = await getAccessTokenFromRefresh(); // ensure valid access token
+    const path = `/listings/2021-08-01/items/${encodeURIComponent(
+      sellerId
+    )}?marketplaceIds=${encodeURIComponent(marketplaceId)}`;
+
+    const data = await signedGetSandbox(path, token);
     res.json(data);
   } catch (err) {
-    console.error('Listings sandbox failed:', err.response?.status, err.response?.data || err.message);
-    res.status(500).json({ error: 'Failed to fetch products (sandbox)', detail: err.response?.data || err.message });
+    const detail = err.response?.data || err.message;
+    console.error('Listings sandbox failed:', err.response?.status, detail);
+    res.status(500).json({ error: 'Failed to fetch products (sandbox)', detail });
   }
 });
 
+// Start server
 app.listen(port, '0.0.0.0', () => {
   console.log(`Backend (sandbox) running on port ${port}`);
 });
