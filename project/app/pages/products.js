@@ -15,14 +15,14 @@ export default function Products() {
     (async () => {
       try {
         setStage('Checking sandbox…');
-        const checkRes = await fetch(`${API_BASE}/spapi/sandbox-check`, { credentials: 'include' });
+        const checkRes = await fetch(`${API_BASE}/spapi/sandbox-check`);
         const check = await checkRes.json();
         if (!checkRes.ok) throw new Error(check?.error || 'Sandbox check failed');
 
         if (cancelled) return;
 
         setStage('Loading products…');
-        const prodRes = await fetch(`${API_BASE}/spapi/products`, { credentials: 'include' });
+        const prodRes = await fetch(`${API_BASE}/spapi/products`);
         const prod = await prodRes.json();
         if (!prodRes.ok) throw new Error(prod?.error || 'Failed to fetch products');
 
