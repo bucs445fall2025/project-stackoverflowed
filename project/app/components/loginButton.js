@@ -28,7 +28,7 @@ export default function LoginButton() {
         >
           🚀
         </button>
-        <p className="rocket-label">Click the rocket to get started</p>
+        <p className="rocket-label">Click me to get started</p>
       </div>
 
       <style jsx>{`

@@ -1,29 +1,31 @@
-import { useRouter } from 'next/router'; // "router hook" lets you navigate between pages
+import { useRouter } from 'next/router';
 
 export default function SignUpButton() {
-    const router = useRouter();
+  const router = useRouter();
 
-    const handleClick = () => {
-        // Reroute to the signUpPage
-        router.push('/signUpPage');
-    };
+  const handleClick = () => {
+    router.push('/signUpPage');
+  };
 
-    return (
-        <button
-            onClick={handleClick}
-            style={{ 
-                backgroundColor: 'blue', 
-                color: 'white', 
-                padding: '10px 20px', 
-                borderRadius: '8px',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: '16px',
-                fontWeight: 'bold',
-                fontFamily: 'Arial, sans-serif',
-            }}
-        >
-            Sign Up
-        </button>
-    );
+  return (
+    <>
+      <span className="signup-link" onClick={handleClick}>
+        Sign Up
+      </span>
+
+      <style jsx>{`
+        .signup-link {
+          color: #ffffff;
+          text-decoration: underline;
+          font-size: 0.9rem;   /* smaller text */
+          cursor: pointer;
+          opacity: 0.85;
+          transition: opacity 0.2s ease;
+        }
+        .signup-link:hover {
+          opacity: 1;
+        }
+      `}</style>
+    </>
+  );
 }
