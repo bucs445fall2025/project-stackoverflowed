@@ -1,7 +1,7 @@
 // components/StarsBackground.jsx
 import { useMemo } from 'react';
 
-export default function StarsBackground({ count = 200 }) {
+export default function StarsBackground({ count = 400 }) {
   // generate stars once per mount
   const stars = useMemo(() => {
     const arr = [];

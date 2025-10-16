@@ -24,7 +24,7 @@ export default function Home() {
         .home-wrap {
           position: relative;
           min-height: 100vh;
-          background: #2c003e; /* deep purple */
+          background: linear-gradient(135deg, #3a0ca3, #7209b7);
           display: grid;
           place-items: center;
           overflow: hidden;
