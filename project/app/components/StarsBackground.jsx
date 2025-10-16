@@ -2,12 +2,12 @@
 import { useMemo } from 'react';
 
 export default function StarsBackground({
-  count = 400,           // total stars (density)
-  minSize = 1,           // px
-  maxSize = 4,           // px
+  count = 600,           // total stars (density)
+  minSize = 2,           // px
+  maxSize = 5,           // px
   minOpacity = 0.25,     // brightness lower bound
   maxOpacity = 1.0,      // brightness upper bound
-  minTwinkle = 3,        // s  (animation duration)
+  minTwinkle = 1,        // s  (animation duration)
   maxTwinkle = 7,        // s
   colors = ['#fff', '#ffe9c4', '#d4fbff'] // subtle color variety
 }) {
@@ -25,8 +25,8 @@ export default function StarsBackground({
         top: Math.random() * 100,      // vh
         left: Math.random() * 100,     // vw
         size,
-        delay: Math.random() * 6,      // s
-        duration: minTwinkle + Math.random() * (maxTwinkle - minTwinkle),
+        delay: Math.random() * 3,      // s
+        duration: minTwinkle + Math.random() * 2,
         baseOpacity,
         color
       });
