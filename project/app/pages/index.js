@@ -51,19 +51,6 @@ export default function Home() {
           align-items: center;
           gap: 0.5rem;
         }
-        .button-group :global(button) {
-          background: #ff9900;
-          color: #000000;
-          border: none;
-          padding: 12px 20px;
-          border-radius: 10px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: transform .08s ease;
-        }
-        .button-group :global(button:hover) {
-          transform: translateY(-1px);
-        }
         .button-group :global(a),
         .button-group :global(.signup-link) {
           color: #fff;
