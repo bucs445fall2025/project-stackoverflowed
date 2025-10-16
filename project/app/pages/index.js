@@ -2,6 +2,13 @@ import LoginButton from '../components/loginButton';
 import SignUpButton from '../components/signUpButton';
 import StarsBackground from '../components/StarsBackground';
 
+import { Space_Grotesk } from 'next/font/google';
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ['latin'],
+  weight: ['600', '700'], // for bold headings
+});
+
 export default function Home() {
   return (
     <div className="home-wrap">
@@ -9,7 +16,7 @@ export default function Home() {
       <StarsBackground count={240} />
 
       <main className="content">
-        <h1 className="home-title">Welcome to FBAlgo</h1>
+      <h1 className={`${spaceGrotesk.className} home-title`}> Welcome to FBAlgo</h1>
 
         <div className="button-group">
           <LoginButton />
@@ -38,13 +45,13 @@ export default function Home() {
           padding: 2rem;
         }
         .home-title {
-          color: #fff;
-          font-weight: 600;
-          font-size: clamp(2rem, 3.5vw, 3rem);
-          letter-spacing: 0.5px;
-          margin-bottom: 0.75rem;
-          text-shadow: 0 2px 24px rgba(0,0,0,0.35);
-        }
+            font-weight: 700;
+            font-size: clamp(2.5rem, 4.5vw, 4rem);
+            letter-spacing: 1px;
+            color: #fff;
+            text-shadow: 0 0 24px rgba(255,255,255,0.2),
+                         0 2px 12px rgba(0,0,0,0.6);
+          }
         .button-group {
           display: flex;
           flex-direction: column;
