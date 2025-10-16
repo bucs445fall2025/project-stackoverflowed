@@ -24,7 +24,7 @@ export default function Home() {
         .home-wrap {
           position: relative;
           min-height: 100vh;
-          background: linear-gradient(135deg, #3a0ca3, #7209b7);
+          background: linear-gradient(135deg, #360f5a, #522081);
           display: grid;
           place-items: center;
           overflow: hidden;
