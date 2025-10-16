@@ -1,24 +1,38 @@
 // components/StarsBackground.jsx
 import { useMemo } from 'react';
 
-export default function StarsBackground({ count = 400 }) {
-  // generate stars once per mount
+export default function StarsBackground({
+  count = 400,           // total stars (density)
+  minSize = 1,           // px
+  maxSize = 4,           // px
+  minOpacity = 0.25,     // brightness lower bound
+  maxOpacity = 1.0,      // brightness upper bound
+  minTwinkle = 3,        // s  (animation duration)
+  maxTwinkle = 7,        // s
+  colors = ['#fff', '#ffe9c4', '#d4fbff'] // subtle color variety
+}) {
   const stars = useMemo(() => {
     const arr = [];
     for (let i = 0; i < count; i++) {
-      const size = Math.random() < 0.85 ? Math.random() * 2 + 1 : Math.random() * 3 + 2; // mostly small, some larger
+      const size =
+        Math.random() < 0.85
+          ? minSize + Math.random() * (maxSize - minSize)           // mostly small
+          : Math.min(maxSize + 1.5, minSize + Math.random() * (maxSize + 1.5)); // a few bigger
+      const baseOpacity = minOpacity + Math.random() * (maxOpacity - minOpacity);
+      const color = colors[Math.floor(Math.random() * colors.length)];
       arr.push({
         id: i,
-        top: Math.random() * 100,     // vh
-        left: Math.random() * 100,    // vw
+        top: Math.random() * 100,      // vh
+        left: Math.random() * 100,     // vw
         size,
-        delay: Math.random() * 6,     // s
-        duration: 3 + Math.random() * 5, // s
-        initialOpacity: 0.2 + Math.random() * 0.8
+        delay: Math.random() * 6,      // s
+        duration: minTwinkle + Math.random() * (maxTwinkle - minTwinkle),
+        baseOpacity,
+        color
       });
     }
     return arr;
-  }, [count]);
+  }, [count, minSize, maxSize, minOpacity, maxOpacity, minTwinkle, maxTwinkle, colors]);
 
   return (
     <>
@@ -32,10 +46,14 @@ export default function StarsBackground({ count = 400 }) {
               left: `${s.left}vw`,
               width: s.size,
               height: s.size,
+              background: `radial-gradient(closest-side, ${s.color}, rgba(255,255,255,0.5), transparent)`,
               animationDelay: `${s.delay}s`,
               animationDuration: `${s.duration}s`,
-              opacity: s.initialOpacity,
-              boxShadow: `0 0 ${Math.max(4, s.size * 2)}px rgba(255,255,255,0.8)`
+              // set per-star twinkle range via CSS vars
+              ['--min']: s.baseOpacity * 0.2,
+              ['--max']: Math.min(1, s.baseOpacity),
+              // crisp glow:
+              boxShadow: `0 0 ${Math.max(4, s.size * 2)}px ${s.color}`
             }}
           />
         ))}
@@ -46,29 +64,25 @@ export default function StarsBackground({ count = 400 }) {
           position: absolute;
           inset: 0;
           overflow: hidden;
-          z-index: 0; /* behind content */
+          z-index: 0;
           pointer-events: none;
         }
         .star {
           position: absolute;
           border-radius: 50%;
-          background: radial-gradient(closest-side, #fff, rgba(255,255,255,0.4), transparent);
           animation-name: twinkle;
           animation-iteration-count: infinite;
           animation-timing-function: ease-in-out;
           will-change: opacity;
+          opacity: var(--min); /* starting opacity */
         }
         @keyframes twinkle {
-          0%   { opacity: 0.1; }
-          50%  { opacity: 1; }
-          100% { opacity: 0.1; }
+          0%   { opacity: var(--min); }
+          50%  { opacity: var(--max); }
+          100% { opacity: var(--min); }
         }
-
-        /* be respectful of motion preferences (keeps static stars) */
         @media (prefers-reduced-motion: reduce) {
-          .star {
-            animation: none !important;
-          }
+          .star { animation: none !important; }
         }
       `}</style>
     </>

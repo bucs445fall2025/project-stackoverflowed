@@ -24,7 +24,7 @@ export default function Home() {
         .home-wrap {
           position: relative;
           min-height: 100vh;
-          background: linear-gradient(135deg, #360f5a, #522081);
+          background: linear-gradient(135deg, #360f5a, #1c0333);
           display: grid;
           place-items: center;
           overflow: hidden;
@@ -56,7 +56,7 @@ export default function Home() {
         /* Login button styling */
         .button-group :global(button) {
           background: #ff9900;
-          color: #111;
+          color: #000000;
           border: none;
           padding: 12px 20px;
           border-radius: 10px;
