@@ -1,6 +1,3 @@
-// pages/index.js (Next.js Pages Router)
-// or app/page.js if you’re using the App Router
-
 import LoginButton from '../components/loginButton';
 import SignUpButton from '../components/signUpButton';
 import StarsBackground from '../components/StarsBackground';
@@ -20,6 +17,7 @@ export default function Home() {
         </div>
       </main>
 
+      {/* page-specific styles */}
       <style jsx>{`
         .home-wrap {
           position: relative;
@@ -53,7 +51,6 @@ export default function Home() {
           align-items: center;
           gap: 0.5rem;
         }
-        /* Login button styling */
         .button-group :global(button) {
           background: #ff9900;
           color: #000000;
@@ -67,13 +64,27 @@ export default function Home() {
         .button-group :global(button:hover) {
           transform: translateY(-1px);
         }
-        /* Sign-up styled as hyperlink */
         .button-group :global(a),
         .button-group :global(.signup-link) {
           color: #fff;
           text-decoration: underline;
           font-weight: 500;
           opacity: 0.95;
+        }
+      `}</style>
+
+      {/* global styles that fix the border */}
+      <style jsx global>{`
+        html, body, #__next {
+          height: 100%;
+          background: #1b0633; /* match your page bg so there’s no white flash */
+        }
+        body {
+          margin: 0; /* <-- removes the white border */
+          overscroll-behavior: none;
+        }
+        * {
+          box-sizing: border-box;
         }
       `}</style>
     </div>
