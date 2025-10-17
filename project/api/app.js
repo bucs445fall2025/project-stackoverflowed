@@ -43,7 +43,7 @@ app.get('/auth/login', (_req, res) => {
   const authUrl = new URL('https://www.amazon.com/ap/oa');
   authUrl.search = new URLSearchParams({
     client_id: process.env.AMAZON_CLIENT_ID,
-    scope: 'sellingpartnerapi::migration',
+    scope: 'profile',
     response_type: 'code',
     redirect_uri: process.env.AMAZON_REDIRECT_URI,
     state,
