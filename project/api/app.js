@@ -38,19 +38,16 @@ app.get('/', (_req, res) => res.send('Hello from backend (sandbox SP-API with co
 
 // ---------- STEP 1: Send seller to Seller Central consent ----------
 app.get('/auth/login', (_req, res) => {
-  const state = Math.random().toString(36).slice(2); // TODO: persist/verify in production
-
-  // US Seller Central. Use regional domain if appropriate for your account:
-  // EU: https://sellercentral-europe.amazon.com
-  // FE: https://sellercentral.amazon.com (with correct region)
-  const consentUrl = new URL('https://sellercentral.amazon.com/apps/authorize/consent');
-  consentUrl.search = new URLSearchParams({
-    application_id: LWA_CLIENT_ID,   // your LWA client id
-    redirect_uri: REDIRECT_URI,      // must exactly match registration
+  const state = Math.random().toString(36).slice(2);
+  const authUrl = new URL('https://www.amazon.com/ap/oa');
+  authUrl.search = new URLSearchParams({
+    client_id: process.env.AMAZON_CLIENT_ID,
+    scope: 'sellingpartnerapi::migration',
+    response_type: 'code',
+    redirect_uri: process.env.AMAZON_REDIRECT_URI,
     state,
   }).toString();
-
-  return res.redirect(consentUrl.toString());
+  res.redirect(authUrl.toString());
 });
 
 // ---------- STEP 2: Callback receives ?spapi_oauth_code=... ----------
