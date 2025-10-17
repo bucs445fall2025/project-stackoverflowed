@@ -21,10 +21,11 @@ app.use(
 
 // --- Config ---
 const port = process.env.PORT || 8080;
+const LWA_CLIENT_ID = process.env.LWA_CLIENT_ID || '';
+const LWA_CLIENT_SECRET = process.env.LWA_CLIENT_SECRET || '';
+const REDIRECT_URI = process.env.LWA_REDIRECT_URI || '';
 const FRONTEND = process.env.FRONTEND_URL || 'http://localhost:3000';
-const LWA_CLIENT_ID = process.env.AMAZON_CLIENT_ID || '';
-const LWA_CLIENT_SECRET = process.env.AMAZON_CLIENT_SECRET || '';
-const REDIRECT_URI = process.env.AMAZON_REDIRECT_URI || ''; // must exactly match app registration
+const mask = s => (s ? s.slice(0,8)+'…'+s.slice(-4) : '(missing)');
 
 // --- In-memory (replace with DB in prod) ---
 let refreshToken = null;          // long-lived; store securely
@@ -47,7 +48,7 @@ app.get('/auth/login', (_req, res) => {
     redirect_uri: process.env.AMAZON_REDIRECT_URI,
     state,
   }).toString();
-  console.log("Redirecting to Amazon LWA:", url.toString());
+  console.log("Redirecting to Amazon LWA:", authUrl.toString());
   res.redirect(authUrl.toString());
 });
 
