@@ -47,6 +47,7 @@ app.get('/auth/login', (_req, res) => {
     redirect_uri: process.env.AMAZON_REDIRECT_URI,
     state,
   }).toString();
+  console.log("Redirecting to Amazon LWA:", url.toString());
   res.redirect(authUrl.toString());
 });
 
