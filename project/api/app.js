@@ -27,7 +27,7 @@ const port = process.env.PORT || 8080;
   "fbalgo database" is the name of the MongoDB databse the backend will use if running a local MongoDB instance
   MongoDB doesnt create database until data is inserted
 */
-mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/fbalgo', {
+mongoose.connect(process.env.MONGO_URL || 'mongodb://localhost:27017/fbalgo', {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
