@@ -58,7 +58,7 @@ export default function LoginPage() {
     setError(false);
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/login`,
+        "https://feisty-renewal-production.up.railway.app/api/users/register",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
