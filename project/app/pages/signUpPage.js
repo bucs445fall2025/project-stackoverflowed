@@ -41,7 +41,7 @@ export default function Signup() {
 
       if (response.ok) {
         setMessage("Account created! Redirecting...");
-        setTimeout(() => router.push("/link-amazon"), 1500); // ✅ Next.js routing
+        setTimeout(() => router.push("/dashboard"), 1500); // ✅ Next.js routing
       } else {
         setMessage(data.message || "Something went wrong.");
       }
