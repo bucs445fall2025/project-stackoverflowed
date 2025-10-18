@@ -58,7 +58,7 @@ export default function LoginPage() {
     setError(false);
     try {
       const res = await fetch(
-        "https://feisty-renewal-production.up.railway.app/api/users/register",
+        "https://feisty-renewal-production.up.railway.app/api/users/login",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
