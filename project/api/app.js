@@ -17,7 +17,7 @@ app.use(express.json());
 // Bind 0.0.0.0 for Railway/Docker, fall back for local
 const port = process.env.PORT || 8080;
 
-mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/fbalgo', {
+mongoose.connect(process.env.MONGO_URL|| 'mongodb://localhost:27017/fbalgo', {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
