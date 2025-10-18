@@ -22,15 +22,14 @@ let marketplaceId = null;        // must be module-scoped so other routes can us
 app.get('/', (_req, res) => res.send('Hello from backend (sandbox)'));
 
 // ---------- LWA STEP 1 ----------
-// ---------- LWA STEP 1 ----------
 app.get('/auth/login', (_req, res) => {
   const state = Math.random().toString(36).slice(2); // store & verify in prod
   const params = new URLSearchParams({
-    application_id: process.env.AMAZON_CLIENT_ID || '',
+    application_id: process.env.SP_APP_ID || '',
     state,
     redirect_uri: process.env.AMAZON_REDIRECT_URI || ''
   });
-  res.redirect(`https://sellercentral.amazon.com/apps/authorize/consent?${params.toString()}`);
+  return res.redirect(`https://sellercentral.amazon.com/apps/authorize/consent?${params.toString()}`);
 });
 
 // ---------- LWA STEP 2 ----------
