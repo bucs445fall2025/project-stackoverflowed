@@ -27,7 +27,8 @@ app.get('/auth/login', (_req, res) => {
   const params = new URLSearchParams({
     application_id: process.env.SP_APP_ID || '',
     state,
-    redirect_uri: process.env.AMAZON_REDIRECT_URI || ''
+    redirect_uri: process.env.AMAZON_REDIRECT_URI || '',
+    version: 'beta'
   });
   return res.redirect(`https://sellercentral.amazon.com/apps/authorize/consent?${params.toString()}`);
 });
