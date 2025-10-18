@@ -15,7 +15,7 @@ export default function Dashboard() {
     (async () => {
       try {
         setStatus('Contacting Amazon sandbox…');
-        const res = await fetch(`${API_BASE}/spapi/sandbox-check`, { credentials: 'include' });
+        const res = await fetch(`${API_BASE}/spapi/sandbox-check`);
         const data = await res.json();
         if (!res.ok) throw new Error(data?.error || 'Sandbox check failed');
         setCheckResult(data);
