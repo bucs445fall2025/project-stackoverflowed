@@ -22,33 +22,30 @@ let marketplaceId = null;        // must be module-scoped so other routes can us
 app.get('/', (_req, res) => res.send('Hello from backend (sandbox)'));
 
 // ---------- LWA STEP 1 ----------
+// ---------- LWA STEP 1 ----------
 app.get('/auth/login', (_req, res) => {
-  const state = Math.random().toString(36).slice(2); // TODO: store/verify in prod
+  const state = Math.random().toString(36).slice(2); // store & verify in prod
   const params = new URLSearchParams({
-    response_type: 'code',
-    client_id: process.env.AMAZON_CLIENT_ID || '',
-    scope: 'sellingpartnerapi::migration',                // add more if you need
-    redirect_uri: process.env.AMAZON_REDIRECT_URI || '',
-    state
+    application_id: process.env.AMAZON_CLIENT_ID || '',
+    state,
+    redirect_uri: process.env.AMAZON_REDIRECT_URI || ''
   });
-  res.redirect(`https://www.amazon.com/ap/oa?${params.toString()}`);
+  res.redirect(`https://sellercentral.amazon.com/apps/authorize/consent?${params.toString()}`);
 });
 
 // ---------- LWA STEP 2 ----------
 app.get('/auth/callback', async (req, res) => {
-  const { code, spapi_oauth_code, error } = req.query;
+  const { spapi_oauth_code, error } = req.query;
   if (error) return res.status(400).send(`Amazon error: ${error}`);
-  const authCode = spapi_oauth_code || code;
-  if (!authCode) return res.status(400).send('No auth code provided');
+  if (!spapi_oauth_code) return res.status(400).send('No spapi_oauth_code provided');
 
   try {
-    // Exchange code for tokens
     const body = new URLSearchParams({
       grant_type: 'authorization_code',
-      code: authCode,
-    client_id: process.env.LWA_CLIENT_ID || '',
-    client_secret: process.env.LWA_CLIENT_SECRET || '',
-    redirect_uri: process.env.LWA_REDIRECT_URI || ''
+      code: spapi_oauth_code,
+      client_id: process.env.AMAZON_CLIENT_ID || '',
+      client_secret: process.env.AMAZON_CLIENT_SECRET || '',
+      redirect_uri: process.env.AMAZON_REDIRECT_URI || ''
     });
 
     const tokenRes = await axios.post(
@@ -58,17 +55,15 @@ app.get('/auth/callback', async (req, res) => {
     );
 
     currentAccessToken = tokenRes.data.access_token;
-    refreshToken = tokenRes.data.refresh_token; // TODO: persist securely
+    refreshToken = tokenRes.data.refresh_token;
 
-    // ✅ Redirect immediately; don't block on SP-API calls here
     const frontend = process.env.FRONTEND_URL || 'http://localhost:3000';
-    return res.redirect(`${frontend}/dashboard`);
+    return res.redirect(`${frontend}`);
   } catch (err) {
     console.error('Token exchange failed:', err.response?.status, err.response?.data || err.message);
     return res.status(500).send('Error exchanging auth code');
   }
 });
-
 /**
  * Helper to sign and GET an SP-API endpoint (sandbox)
  */
