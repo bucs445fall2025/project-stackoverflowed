@@ -27,7 +27,7 @@ app.get('/auth/login', (_req, res) => {
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: process.env.AMAZON_CLIENT_ID || '',
-    scope: 'profile',                // add more if you need
+    scope: 'sellingpartnerapi::migration',                // add more if you need
     redirect_uri: process.env.AMAZON_REDIRECT_URI || '',
     state
   });
@@ -36,18 +36,19 @@ app.get('/auth/login', (_req, res) => {
 
 // ---------- LWA STEP 2 ----------
 app.get('/auth/callback', async (req, res) => {
-  const { code, error } = req.query;
+  const { code, spapi_oauth_code, error } = req.query;
   if (error) return res.status(400).send(`Amazon error: ${error}`);
-  if (!code) return res.status(400).send('No auth code provided');
+  const authCode = spapi_oauth_code || code;
+  if (!authCode) return res.status(400).send('No auth code provided');
 
   try {
     // Exchange code for tokens
     const body = new URLSearchParams({
       grant_type: 'authorization_code',
-      code,
-      client_id: process.env.AMAZON_CLIENT_ID || '',
-      client_secret: process.env.AMAZON_CLIENT_SECRET || '',
-      redirect_uri: process.env.AMAZON_REDIRECT_URI || ''
+      code: authCode,
+    client_id: process.env.LWA_CLIENT_ID || '',
+    client_secret: process.env.LWA_CLIENT_SECRET || '',
+    redirect_uri: process.env.LWA_REDIRECT_URI || ''
     });
 
     const tokenRes = await axios.post(
