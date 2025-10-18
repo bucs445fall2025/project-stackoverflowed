@@ -1,7 +1,12 @@
 // pages/loginPage.js
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
-import StarsBackground from "../components/StarsBackground";
+import dynamic from "next/dynamic";
+
+// Load the canvas only in the browser (avoids SSR crashes)
+const StarsBackground = dynamic(() => import("../components/StarsBackground"), {
+  ssr: false,
+});
 
 export default function LoginPage() {
   const router = useRouter();
@@ -10,7 +15,7 @@ export default function LoginPage() {
   const [error, setError] = useState(false);
   const popupRef = useRef(null);
 
-  // Draggable logic
+  // Draggable popup
   useEffect(() => {
     const popup = popupRef.current;
     if (!popup) return;
@@ -24,19 +29,16 @@ export default function LoginPage() {
       offsetX = e.clientX - popup.offsetLeft;
       offsetY = e.clientY - popup.offsetTop;
     };
-
     const onMouseMove = (e) => {
       if (!isDragging) return;
       popup.style.left = `${e.clientX - offsetX}px`;
       popup.style.top = `${e.clientY - offsetY}px`;
     };
-
     const onMouseUp = () => { isDragging = false; };
 
     popup.addEventListener("mousedown", onMouseDown);
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
-
     return () => {
       popup.removeEventListener("mousedown", onMouseDown);
       window.removeEventListener("mousemove", onMouseMove);
@@ -46,23 +48,23 @@ export default function LoginPage() {
 
   // Auto-dismiss
   useEffect(() => {
-    if (error) {
-      const timer = setTimeout(() => setError(false), 5000);
-      return () => clearTimeout(timer);
-    }
+    if (!error) return;
+    const t = setTimeout(() => setError(false), 5000);
+    return () => clearTimeout(t);
   }, [error]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError(false);
-
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/login`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+        }
+      );
       if (res.ok) router.push("/dashboard");
       else setError(true);
     } catch (err) {
@@ -72,27 +74,14 @@ export default function LoginPage() {
   };
 
   return (
-    <StarsBackground>
-      <div style={{
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        height: "100vh",
-        fontFamily: "Arial, sans-serif",
-        position: "relative",
-      }}>
-        {/* Login Box */}
-        <div style={{
-          background: "rgba(255, 255, 255, 0.05)",
-          backdropFilter: "blur(10px)",
-          padding: "40px",
-          borderRadius: "15px",
-          boxShadow: "0 0 30px rgba(0,0,0,0.5)",
-          width: "350px",
-          textAlign: "center",
-          color: "white",
-        }}>
-          <h2 style={{ marginBottom: "20px" }}>Login</h2>
+    <div className="login-wrap">
+      {/* starfield behind everything */}
+      <StarsBackground count={240} />
+
+      {/* content above the stars */}
+      <main className="content">
+        <div className="login-card">
+          <h2>Login</h2>
           <form onSubmit={handleLogin}>
             <input
               type="text"
@@ -100,15 +89,6 @@ export default function LoginPage() {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
-              style={{
-                width: "100%",
-                padding: "12px 15px",
-                margin: "10px 0",
-                border: "none",
-                borderRadius: "10px",
-                outline: "none",
-                fontSize: "16px",
-              }}
             />
             <input
               type="password"
@@ -116,31 +96,9 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              style={{
-                width: "100%",
-                padding: "12px 15px",
-                margin: "10px 0",
-                border: "none",
-                borderRadius: "10px",
-                outline: "none",
-                fontSize: "16px",
-              }}
             />
             <button
               type="submit"
-              style={{
-                width: "100%",
-                padding: "12px",
-                marginTop: "10px",
-                border: "none",
-                borderRadius: "10px",
-                background: "linear-gradient(90deg, #8a2be2, #4b0082)",
-                color: "white",
-                fontSize: "18px",
-                fontWeight: "bold",
-                cursor: "pointer",
-                transition: "transform 0.2s, box-shadow 0.2s",
-              }}
               onMouseOver={(e) => {
                 e.currentTarget.style.transform = "translateY(-2px)";
                 e.currentTarget.style.boxShadow = "0 5px 15px rgba(0,0,0,0.3)";
@@ -155,52 +113,113 @@ export default function LoginPage() {
           </form>
         </div>
 
-        {/* Error Popup */}
         {error && (
-          <div
-            ref={popupRef}
-            style={{
-              position: "absolute",
-              top: "20px",
-              left: "50%",
-              transform: "translateX(-50%)",
-              padding: "20px",
-              background: "rgba(255,0,0,0.85)",
-              borderRadius: "15px",
-              textAlign: "center",
-              color: "white",
-              animation: "fadeIn 0.3s ease-in-out",
-              maxWidth: "300px",
-              cursor: "move",
-              zIndex: 1000
-            }}
-          >
+          <div className="error-popup" ref={popupRef}>
             <p>Login failed! You may not have an account.</p>
-            <button
-              onClick={() => router.push("/signUpPage")}
-              style={{
-                marginTop: "10px",
-                padding: "10px 20px",
-                border: "none",
-                borderRadius: "10px",
-                background: "linear-gradient(90deg, #ff416c, #ff4b2b)",
-                color: "white",
-                fontWeight: "bold",
-                cursor: "pointer"
-              }}
-            >
+            <button onClick={() => router.push("/signUpPage")}>
               Click here to sign up
             </button>
           </div>
         )}
+      </main>
 
-        <style jsx>{`
-          @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
-          }
-        `}</style>
-      </div>
-    </StarsBackground>
+      {/* page styles */}
+      <style jsx>{`
+        .login-wrap {
+          position: relative;
+          min-height: 100vh;
+          background: linear-gradient(135deg, #360f5a, #1c0333);
+          overflow: hidden; /* keep canvas clipped */
+          display: grid;
+          place-items: center;
+        }
+        .content {
+          position: relative;
+          z-index: 1; /* float above the canvas */
+          width: 100%;
+          display: grid;
+          place-items: center;
+        }
+        .login-card {
+          background: rgba(255, 255, 255, 0.05);
+          backdrop-filter: blur(10px);
+          padding: 40px;
+          border-radius: 15px;
+          box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+          width: 350px;
+          text-align: center;
+          color: white;
+        }
+        .login-card h2 {
+          margin: 0 0 20px;
+        }
+        .login-card input {
+          width: 100%;
+          padding: 12px 15px;
+          margin: 10px 0;
+          border: none;
+          border-radius: 10px;
+          outline: none;
+          font-size: 16px;
+        }
+        .login-card button[type="submit"] {
+          width: 100%;
+          padding: 12px;
+          margin-top: 10px;
+          border: none;
+          border-radius: 10px;
+          background: linear-gradient(90deg, #8a2be2, #4b0082);
+          color: white;
+          font-size: 18px;
+          font-weight: bold;
+          cursor: pointer;
+          transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .error-popup {
+          position: absolute;
+          top: 20px;
+          left: 50%;
+          transform: translateX(-50%);
+          padding: 20px;
+          background: rgba(255, 0, 0, 0.85);
+          border-radius: 15px;
+          text-align: center;
+          color: white;
+          animation: fadeIn 0.3s ease-in-out;
+          max-width: 300px;
+          cursor: move;
+          z-index: 1000;
+        }
+        .error-popup button {
+          margin-top: 10px;
+          padding: 10px 20px;
+          border: none;
+          border-radius: 10px;
+          background: linear-gradient(90deg, #ff416c, #ff4b2b);
+          color: white;
+          font-weight: bold;
+          cursor: pointer;
+        }
+
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(-10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+
+      {/* global fixes to avoid white border/flash */}
+      <style jsx global>{`
+        html, body, #__next {
+          height: 100%;
+          background: #1b0633;
+        }
+        body {
+          margin: 0;
+          overscroll-behavior: none;
+        }
+        * { box-sizing: border-box; }
+      `}</style>
+    </div>
   );
 }
