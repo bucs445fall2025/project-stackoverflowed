@@ -17,6 +17,16 @@ app.use(express.json());
 // Bind 0.0.0.0 for Railway/Docker, fall back for local
 const port = process.env.PORT || 8080;
 
+
+/*  
+  Establishes connection to Mongo database using Mongoose
+  
+  Uses the connection string from environment variables (MONGO_URI) if available
+      otherwise falls back to a local MongoDB instance on your machine (fbalgo database)
+
+  "fbalgo database" is the name of the MongoDB databse the backend will use if running a local MongoDB instance
+  MongoDB doesnt create database until data is inserted
+*/
 mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/fbalgo', {
   useNewUrlParser: true,
   useUnifiedTopology: true,
@@ -24,6 +34,7 @@ mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/fbalgo', {
 .then(() => console.log('Connected to MongoDB'))
 .catch(err => console.error('MongoDB connection error:', err));
 
+// Defines what a user document looks like in the MongoDB
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   email:    { type: String, required: true, unique: true },
@@ -36,6 +47,7 @@ const userSchema = new mongoose.Schema({
   },
 }, { timestamps: true });
 
+// Creates a model, like a class used to create, read, update, and delete users from database
 const User = mongoose.model('User', userSchema);
 
 let currentAccessToken = null;   // LWA access token (short-lived)
