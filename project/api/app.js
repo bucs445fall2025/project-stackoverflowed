@@ -80,7 +80,7 @@ app.post('/api/users/register', async (req, res) => {
     res.status(201).json({ message: 'Account created successfully' });
   } catch (err) {
     console.error('Signup error:', err.message);
-    res.status(500).json({ message: 'Server error during signup' });
+    res.status(500).json({ message: 'Server error during signup', error: err.message });
   }
 });
 
