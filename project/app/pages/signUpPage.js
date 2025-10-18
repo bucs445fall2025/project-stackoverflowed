@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom"; // add this for navigation
+import { useRouter } from "next/router"; // ✅ use Next.js router
 
 export default function Signup() {
-  const navigate = useNavigate(); // initialize navigate
+  const router = useRouter(); // ✅ initialize router
 
   const [formData, setFormData] = useState({
     username: "",
@@ -27,7 +27,7 @@ export default function Signup() {
     }
 
     try {
-      const response = await fetch("http://localhost:8080/api/users/register", {
+      const response = await fetch("/api/users/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -41,7 +41,7 @@ export default function Signup() {
 
       if (response.ok) {
         setMessage("Account created! Redirecting...");
-        setTimeout(() => navigate("/link-amazon"), 1500);
+        setTimeout(() => router.push("/link-amazon"), 1500); // ✅ Next.js routing
       } else {
         setMessage(data.message || "Something went wrong.");
       }
@@ -56,6 +56,7 @@ export default function Signup() {
       <div className="w-full max-w-md bg-white shadow-lg rounded-2xl p-8">
         <h2 className="text-2xl font-semibold text-center mb-6">Create FBAlgo Account</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* inputs */}
           <input
             type="text"
             name="username"
