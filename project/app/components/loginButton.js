@@ -2,8 +2,8 @@ import { useState } from 'react';
 
 const LOGIN_URL =
   (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_BACKEND_URL)
-    ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/login`
-    : 'https://feisty-renewal-production.up.railway.app/auth/login';
+    ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/users/login`
+    : 'https://feisty-renewal-production.up.railway.app/api/users/login';
 
 export default function LoginButton() {
   const [launching, setLaunching] = useState(false);
