@@ -1,35 +1,35 @@
 // app.js
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const mongoose = require('mongoose');
+require('dotenv').config(); // Loads variables from .env into process.env
+const express = require('express'); // Import express for back-end framework
+const cors = require('cors'); // Import CORS middleware to allow front-end to request to this server  
+const connectDB = require('./config/db');  // Import connectDB()
 
-const connectDB = require('./config/db'); 
-
-const app = express();
-app.use(cors({ origin: '*' }));
-app.use(express.json());
+const app = express(); // Create a new express app instance
+app.use(cors({ origin: '*' })); // Add CORS middleware to the app instance. '*' = any domain can send reqs here
+app.use(express.json()); // Adds middleware to automatically parse incoming JSON in request bodies 
 
 // Routes
 const amazonRoutes = require('./routes/amazonRoutes'); // Importing amazon routes
-app.use('/api/amazon', amazonRoutes); // Mount amazon routes
-
+app.use('/api/amazon', amazonRoutes); // Mounts them under /api/amazon so any reqs to /api/amazon/... will be handled by that router
 const userRoutes = require('./routes/userRoutes'); // Importing user routes
-app.use('/api/users', userRoutes); // Mount user routes
+app.use('/api/users', userRoutes); // Mounts them under /api/users
 
-// Global error handler
+// Global error handler for routes
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ error: 'Something went wrong (app.js)' });
 });
 
-// Health check
+// Health check, for checking if server is running
 app.get('/', (_req, res) => res.send('Hello from backend (sandbox)'));
 
-// Bind 0.0.0.0 for Railway/Docker, fall back for local
+ // Sets the port for the server to listen on
 const port = process.env.PORT || 8080;
+
+// Connect database first, then start express server
 connectDB().then(() => {
-  app.listen(port, '0.0.0.0', () => {
+  // 0.0.0.0 Allows the server to accept connections from any network interface (important for Docker/railway)
+  app.listen(port, '0.0.0.0', () => { 
   console.log(`Backend (sandbox) running on port ${port}`);
   });
 });
