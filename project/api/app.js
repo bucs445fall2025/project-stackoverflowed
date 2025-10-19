@@ -4,10 +4,13 @@ const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 
+const connectDB = require('./db'); 
+
 const app = express();
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
+// Routes
 const amazonRoutes = require('./routes/amazonRoutes'); // Importing amazon routes
 app.use('/api/amazon', amazonRoutes); // Mount amazon routes
 
@@ -25,6 +28,8 @@ app.get('/', (_req, res) => res.send('Hello from backend (sandbox)'));
 
 // Bind 0.0.0.0 for Railway/Docker, fall back for local
 const port = process.env.PORT || 8080;
-app.listen(port, '0.0.0.0', () => {
+connectDB().then(() => {
+  app.listen(port, '0.0.0.0', () => {
   console.log(`Backend (sandbox) running on port ${port}`);
+  });
 });
