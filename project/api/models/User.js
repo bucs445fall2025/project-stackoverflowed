@@ -1,6 +1,6 @@
-const mongoose = require('mongoose');
+const mongoose = require('mongoose'); // Import Mongoose, a node.js library for working with MongoDB
 
-// Defines what a user document looks like in the MongoDB
+// Define what a user document looks like in MongoDB
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   email:    { type: String, required: true, unique: true },
@@ -13,5 +13,5 @@ const userSchema = new mongoose.Schema({
   },
 }, { timestamps: true });
 
-// Creates and exports the User model
+// Create and export the User model to be 
 module.exports = mongoose.model('User', userSchema);

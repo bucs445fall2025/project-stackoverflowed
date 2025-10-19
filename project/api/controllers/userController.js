@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 
-exports.registerUser = async (req, res) => {
+const registerUser = async (req, res) => {
   try {
     const { username, email, password } = req.body;
     if (!username || !email || !password)
@@ -20,7 +20,7 @@ exports.registerUser = async (req, res) => {
   }
 };
 
-exports.loginUser = async (req, res) => {
+const loginUser = async (req, res) => {
   try {
     const { username, password } = req.body;
     if (!username || !password)
@@ -39,3 +39,5 @@ exports.loginUser = async (req, res) => {
     res.status(500).json({ message: 'Server error during login', error: err.message });
   }
 };
+
+module.exports = { registerUser, loginUser };
