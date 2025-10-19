@@ -6,15 +6,15 @@ const https = require('https');
 const aws4 = require('aws4');
 const mongoose = require('mongoose');
 
+const app = express();
+app.use(cors({ origin: '*' }));
+app.use(express.json());
+
 // Mount user routes
 const userRoutes = require('./routes/userRoutes'); // Importing user routes
 app.use('/api/users', userRoutes);
 
 require('dotenv').config();
-
-const app = express();
-app.use(cors({ origin: '*' }));
-app.use(express.json());
 
 // Bind 0.0.0.0 for Railway/Docker, fall back for local
 const port = process.env.PORT || 8080;
