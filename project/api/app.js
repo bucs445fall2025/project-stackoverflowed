@@ -4,9 +4,11 @@ const cors = require('cors');
 const axios = require('axios');
 const https = require('https');
 const aws4 = require('aws4');
-
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
+
+// Mount user routes
+const userRoutes = require('./routes/userRoutes'); // Importing user routes
+app.use('/api/users', userRoutes);
 
 require('dotenv').config();
 
@@ -34,21 +36,7 @@ mongoose.connect(process.env.MONGO_URL || 'mongodb://localhost:27017/fbalgo', {
 .then(() => console.log('Connected to MongoDB'))
 .catch(err => console.error('MongoDB connection error:', err));
 
-// Defines what a user document looks like in the MongoDB
-const userSchema = new mongoose.Schema({
-  username: { type: String, required: true, unique: true },
-  email:    { type: String, required: true, unique: true },
-  passwordHash: { type: String, required: true },
 
-  amazon: {
-    accessToken: String,
-    refreshToken: String,
-    tokenExpiry: Date,
-  },
-}, { timestamps: true });
-
-// Creates a model, like a class used to create, read, update, and delete users from database
-const User = mongoose.model('User', userSchema);
 
 let currentAccessToken = null;   // LWA access token (short-lived)
 let refreshToken = null;         // save this in DB later
@@ -58,51 +46,9 @@ let marketplaceId = null;        // must be module-scoped so other routes can us
 // Health check
 app.get('/', (_req, res) => res.send('Hello from backend (sandbox)'));
 
-// ---------- USER SIGNUP ----------
-app.post('/api/users/register', async (req, res) => {
-  try {
-    const { username, email, password } = req.body;
-    if (!username || !email || !password) {
-      return res.status(400).json({ message: 'Missing required fields' });
-    }
 
-    const existing = await User.findOne({ $or: [{ username }, { email }] });
-    if (existing) {
-      return res.status(400).json({ message: 'Username or email already exists' });
-    }
 
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(password, salt);
 
-    const newUser = new User({ username, email, passwordHash });
-    await newUser.save();
-
-    res.status(201).json({ message: 'Account created successfully' });
-  } catch (err) {
-    console.error('Signup error:', err.message);
-    res.status(500).json({ message: 'Server error during signup', error: err.message });
-  }
-});
-
-// ---------- USER LOGIN ----------
-app.post('/api/users/login', async (req, res) => {
-  try {
-    const { username, password } = req.body;
-    if (!username || !password) return res.status(400).json({ message: 'Missing credentials' });
-
-    const user = await User.findOne({ username });
-    if (!user) return res.status(400).json({ message: 'Invalid username or password' });
-
-    const isMatch = await bcrypt.compare(password, user.passwordHash);
-    if (!isMatch) return res.status(400).json({ message: 'Invalid username or password' });
-
-    // You can issue a JWT later, but for now just return success
-    res.status(200).json({ message: 'Login successful', userId: user._id });
-  } catch (err) {
-    console.error('Login error:', err.message);
-    res.status(500).json({ message: 'Server error during login' });
-  }
-});
 
 // ---------- LWA STEP 1 ----------
 app.get('/auth/login', (_req, res) => {
@@ -115,6 +61,7 @@ app.get('/auth/login', (_req, res) => {
   });
   return res.redirect(`https://sellercentral.amazon.com/apps/authorize/consent?${params.toString()}`);
 });
+
 
 // ---------- LWA STEP 2 ----------
 app.get('/auth/callback', async (req, res) => {
@@ -148,6 +95,10 @@ app.get('/auth/callback', async (req, res) => {
   }
 });
 
+
+
+
+
 /**
  * Helper to sign and GET an SP-API endpoint (sandbox)
  */
@@ -172,6 +123,10 @@ async function signedGetSandbox(path, accessToken) {
   return data;
 }
 
+
+
+
+
 /**
  * Quick sandbox check: fetch mock marketplace participations
  * (Also grabs sellerId & marketplaceId for later.)
@@ -195,6 +150,9 @@ app.get('/spapi/sandbox-check', async (_req, res) => {
     res.status(500).json({ error: 'Sandbox call failed', detail: err.response?.data || err.message });
   }
 });
+
+
+
 
 /**
  * Example sandbox "products" route — uses Listings Items in sandbox.
