@@ -29,7 +29,7 @@ export default function Dashboard() {
     setError(null);
     setStatus("Contacting Amazon sandbox…");
     try {
-      const res = await fetch(`${API_BASE}/spapi/sandbox-check`);
+      const res = await fetch(`${API_BASE}/api/amazon/spapi/sandbox-check`);
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Sandbox check failed");
       setCheckResult(data);
@@ -52,7 +52,7 @@ export default function Dashboard() {
 
   const handleLinkFBA = () => {
     // Start OAuth on the backend; backend will redirect to Amazon and then back to FRONTEND_URL
-    window.location.href = `${API_BASE}/auth/login`;
+    window.location.href = `${API_BASE}/api/amazon/auth/login`;
   };
 
   return (
