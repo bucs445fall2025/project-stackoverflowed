@@ -8,7 +8,7 @@ const API_BASE =
   process.env.NEXT_PUBLIC_BACKEND_URL ||
   "https://feisty-renewal-production.up.railway.app";
 
-// FastAPI base for deals/scrape (set NEXT_PUBLIC_PYAPI_URL if you want)
+// FastAPI base for deals/scrape
 const PYAPI_BASE =
   process.env.NEXT_PUBLIC_PYAPI_URL ||
   "https://diligent-spontaneity-production-d286.up.railway.app";
@@ -35,16 +35,19 @@ export default function Dashboard() {
   const [wmIngesting, setWmIngesting] = useState(false);
   const [wmMsg, setWmMsg] = useState("");
 
-  // ── NEW: Deals states (Walmart vs Amazon)
+  // Deals (Walmart vs Amazon, title/brand)
   const [deals, setDeals] = useState([]);
   const [dealsLoading, setDealsLoading] = useState(false);
   const [dealsMsg, setDealsMsg] = useState("");
-  // filters
-  const [dealCategory, setDealCategory] = useState("");  // optional string
-  const [dealMinPct, setDealMinPct] = useState(0.20);    // fraction (0.20 = 20%)
-  const [dealMinAbs, setDealMinAbs] = useState(5);       // dollars
-  const [dealLimit, setDealLimit] = useState(24);
 
+  // Filters
+  const [dealCategory, setDealCategory] = useState("");
+  const [dealMinPct, setDealMinPct] = useState(0.2); // 20%
+  const [dealMinAbs, setDealMinAbs] = useState(5);
+  const [dealLimit, setDealLimit] = useState(24);
+  const [dealMinScore, setDealMinScore] = useState(0.62); // title match score
+
+  // Sandbox check
   const runSandboxCheck = async () => {
     setChecking(true);
     setError(null);
@@ -63,7 +66,7 @@ export default function Dashboard() {
     }
   };
 
-  // Optional: try a check after OAuth return
+  // After OAuth
   useEffect(() => {
     if (typeof window !== "undefined" && (window.location.search || window.location.hash)) {
       runSandboxCheck();
@@ -74,12 +77,11 @@ export default function Dashboard() {
     window.location.href = `${API_BASE}/api/amazon/auth/login`;
   };
 
-  // ── Walmart: Ingest via SerpAPI (pyapi) through Node proxy ────────────────
+  // Walmart: ingest via Node proxy -> pyapi
   const ingestWalmart = async () => {
     setWmIngesting(true);
     setWmMsg("");
     try {
-      // change the query to what you want to ingest
       const body = { query: "protein powder", max_pages: 1, delay_ms: 700 };
       const r = await fetch(`${API_BASE}/api/amazon/walmart/scrape`, {
         method: "POST",
@@ -88,10 +90,7 @@ export default function Dashboard() {
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data?.detail || data?.error || "Ingestion failed");
-      setWmMsg(
-        `Ingested ${data.inserted} new / ${data.updated} updated (processed ${data.total_processed})`
-      );
-      // after ingest, refresh list
+      setWmMsg(`Ingested ${data.inserted} new / ${data.updated} updated (processed ${data.total_processed})`);
       await fetchWalmartItems();
     } catch (e) {
       setWmMsg(`Error: ${e.message}`);
@@ -100,7 +99,7 @@ export default function Dashboard() {
     }
   };
 
-  // ── Walmart: Fetch items from Mongo via Node read route ───────────────────
+  // Walmart: fetch items
   const fetchWalmartItems = async () => {
     setWmLoading(true);
     setWmMsg("");
@@ -108,7 +107,6 @@ export default function Dashboard() {
       const r = await fetch(`${API_BASE}/api/amazon/walmart/items?limit=30`);
       const data = await r.json();
       if (!r.ok) throw new Error(data?.error || "Failed to load items");
-      // Expecting { items: [...] }
       setWmItems(Array.isArray(data.items) ? data.items : []);
       if (!Array.isArray(data.items) || data.items.length === 0) {
         setWmMsg("No items found yet. Try 'Ingest Walmart (SerpAPI)'.");
@@ -120,28 +118,30 @@ export default function Dashboard() {
     }
   };
 
-  // auto-load items once on mount (optional)
+  // Autoload Walmart items
   useEffect(() => {
     fetchWalmartItems();
   }, []);
 
-  // ── NEW: Fetch deals from FastAPI /deals/by-category ──────────────────────
-  const fetchDeals = async () => {
-    setDealsLoading(true);
+  // Build Amazon cache by title/brand
+  const buildAmazonCacheByTitle = async () => {
     setDealsMsg("");
+    setDealsLoading(true);
     try {
-      const params = new URLSearchParams({
-        min_pct: String(dealMinPct),
-        min_abs: String(dealMinAbs),
-        limit: String(dealLimit),
+      const body = {
+        limit_items: 40,
+        max_serp_calls: 25,
+        min_score: dealMinScore,
+        ...(dealCategory.trim() ? { category: dealCategory.trim() } : {}),
+      };
+      const r = await fetch(`${PYAPI_BASE}/amazon/index-by-title`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
       });
-      if (dealCategory.trim()) params.set("category", dealCategory.trim());
-      const r = await fetch(`${PYAPI_BASE}/deals/by-category?${params.toString()}`);
       const data = await r.json();
-      if (!r.ok) throw new Error(data?.detail || data?.error || "Failed to fetch deals");
-      const arr = Array.isArray(data.deals) ? data.deals : [];
-      setDeals(arr);
-      if (!arr.length) setDealsMsg("No deals yet. Ingest → Enrich UPCs → Index Amazon, then refresh.");
+      if (!r.ok) throw new Error(data?.detail || data?.error || "Index failed");
+      setDealsMsg(`Indexed: ${data.fetched_now} (misses: ${data.misses})`);
     } catch (e) {
       setDealsMsg(`Error: ${e.message}`);
     } finally {
@@ -149,14 +149,39 @@ export default function Dashboard() {
     }
   };
 
-  // optional: try to load deals on mount
+  // Fetch deals (title/brand match)
+  const fetchDeals = async () => {
+    setDealsLoading(true);
+    setDealsMsg("");
+    try {
+      const params = new URLSearchParams({
+        min_pct: String(dealMinPct),
+        min_abs: String(dealMinAbs),
+        min_score: String(dealMinScore),
+        limit: String(dealLimit),
+      });
+      if (dealCategory.trim()) params.set("category", dealCategory.trim());
+
+      const r = await fetch(`${PYAPI_BASE}/deals/by-title?${params.toString()}`);
+      const data = await r.json();
+      if (!r.ok) throw new Error(data?.detail || data?.error || "Failed to fetch deals");
+      const arr = Array.isArray(data.deals) ? data.deals : [];
+      setDeals(arr);
+      if (!arr.length) setDealsMsg("No deals yet. Build Amazon Cache, then Find Deals.");
+    } catch (e) {
+      setDealsMsg(`Error: ${e.message}`);
+    } finally {
+      setDealsLoading(false);
+    }
+  };
+
+  // Optional autoload
   useEffect(() => {
     fetchDeals();
   }, []);
 
   return (
     <div className="dash-wrap">
-      {/* starfield behind everything */}
       <StarsBackground count={240} />
 
       <main className="content">
@@ -165,17 +190,13 @@ export default function Dashboard() {
           <p className="subtitle">Welcome back — link your Amazon Seller (FBA) account to continue.</p>
 
           <div className="actions">
-            <button className="primary" onClick={handleLinkFBA}>
-              Link FBA Account
-            </button>
+            <button className="primary" onClick={handleLinkFBA}>Link FBA Account</button>
             <button className="secondary" onClick={runSandboxCheck} disabled={checking}>
               {checking ? "Checking…" : "Refresh Sandbox Check"}
             </button>
           </div>
 
-          <div className="status">
-            <strong>Status:</strong> {status}
-          </div>
+          <div className="status"><strong>Status:</strong> {status}</div>
           {error && <pre className="error">{error}</pre>}
 
           {checkResult && (
@@ -186,7 +207,6 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Products viewer appears once sandbox is linked */}
         {checkResult && (
           <div className="products-card">
             <h2 className={`${spaceGrotesk.className} products-title`}>Your Products (Sandbox)</h2>
@@ -212,9 +232,8 @@ export default function Dashboard() {
 
           <div className="grid">
             {wmItems.map((it) => (
-              <div className="wm-card" key={it.key || it._id}>
+              <div className="wm-card" key={it.product_id || it.key || it._id}>
                 <div className="thumb-wrap">
-                  {/* title attribute shows full title on hover */}
                   {it.thumbnail ? (
                     <img src={it.thumbnail} alt={it.title || "thumbnail"} />
                   ) : (
@@ -222,13 +241,7 @@ export default function Dashboard() {
                   )}
                 </div>
                 <div className="wm-meta">
-                  <a
-                    className="wm-title"
-                    href={it.link || "#"}
-                    target="_blank"
-                    rel="noreferrer"
-                    title={it.title}
-                  >
+                  <a className="wm-title" href={it.link || "#"} target="_blank" rel="noreferrer" title={it.title}>
                     {it.title || "Untitled"}
                   </a>
                   <div className="wm-row">
@@ -249,16 +262,14 @@ export default function Dashboard() {
             ))}
           </div>
 
-          {wmItems.length === 0 && !wmLoading && (
-            <p className="subtitle">Nothing to show yet.</p>
-          )}
+          {wmItems.length === 0 && !wmLoading && <p className="subtitle">Nothing to show yet.</p>}
         </div>
 
-        {/* ───────────────── NEW: Deals finder ───────────────── */}
+        {/* Deals finder (Title/Brand) */}
         <div className="card">
           <h2 className={`${spaceGrotesk.className} products-title`}>Find Deals (Walmart vs Amazon)</h2>
           <p className="subtitle">
-            Items where <strong>Walmart</strong> is cheaper than Amazon by your thresholds.
+            Walmart items cheaper than Amazon by your thresholds. Build the Amazon cache first, then find deals.
           </p>
 
           {/* Filters */}
@@ -269,61 +280,82 @@ export default function Dashboard() {
                 value={dealCategory}
                 onChange={(e) => setDealCategory(e.target.value)}
                 placeholder="optional (e.g., Electronics)"
-                style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", color: "#fff"}}
+                style={{
+                  padding: "8px 10px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.2)",
+                  background: "rgba(255,255,255,0.08)", color: "#fff"
+                }}
               />
             </label>
 
             <label style={{ display: "flex", gap: 8, alignItems: "center", color: "#fff" }}>
               Min %:
               <input
-                type="number"
-                step="0.05"
-                min="0"
+                type="number" step="0.05" min="0"
                 value={dealMinPct}
                 onChange={(e) => setDealMinPct(parseFloat(e.target.value || "0"))}
-                style={{ width: 90, padding: "8px 10px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", color: "#fff"}}
+                style={{
+                  width: 90, padding: "8px 10px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.2)",
+                  background: "rgba(255,255,255,0.08)", color: "#fff"
+                }}
               />
             </label>
 
             <label style={{ display: "flex", gap: 8, alignItems: "center", color: "#fff" }}>
               Min $:
               <input
-                type="number"
-                step="1"
-                min="0"
+                type="number" step="1" min="0"
                 value={dealMinAbs}
                 onChange={(e) => setDealMinAbs(parseFloat(e.target.value || "0"))}
-                style={{ width: 90, padding: "8px 10px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", color: "#fff"}}
+                style={{
+                  width: 90, padding: "8px 10px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.2)",
+                  background: "rgba(255,255,255,0.08)", color: "#fff"
+                }}
+              />
+            </label>
+
+            <label style={{ display: "flex", gap: 8, alignItems: "center", color: "#fff" }}>
+              Min score:
+              <input
+                type="number" step="0.01" min="0" max="1"
+                value={dealMinScore}
+                onChange={(e) => setDealMinScore(parseFloat(e.target.value || "0.62"))}
+                style={{
+                  width: 90, padding: "8px 10px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.2)",
+                  background: "rgba(255,255,255,0.08)", color: "#fff"
+                }}
               />
             </label>
 
             <label style={{ display: "flex", gap: 8, alignItems: "center", color: "#fff" }}>
               Limit:
               <input
-                type="number"
-                step="1"
-                min="1"
-                max="200"
+                type="number" step="1" min="1" max="200"
                 value={dealLimit}
                 onChange={(e) => setDealLimit(parseInt(e.target.value || "24", 10))}
-                style={{ width: 90, padding: "8px 10px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.2)", background: "rgba(255,255,255,0.08)", color: "#fff"}}
+                style={{
+                  width: 90, padding: "8px 10px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.2)",
+                  background: "rgba(255,255,255,0.08)", color: "#fff"
+                }}
               />
             </label>
 
+            <button className="secondary" onClick={buildAmazonCacheByTitle} disabled={dealsLoading}>
+              {dealsLoading ? "Indexing…" : "Build Amazon Cache"}
+            </button>
             <button className="primary" onClick={fetchDeals} disabled={dealsLoading}>
               {dealsLoading ? "Searching…" : "Find Deals"}
             </button>
           </div>
 
-          {dealsMsg && <div className="status">Error: {dealsMsg}</div>}
+          {dealsMsg && <div className="status">{dealsMsg}</div>}
 
           <div className="deals-grid">
             {deals.map((d, i) => {
               const wm = d.wm || {};
               const amz = d.amz || {};
-              const badge = d.savings_pct >= 20 ? "20%+ cheaper" : null;
+              const badge = (d.savings_pct ?? 0) >= 20 ? "20%+ cheaper" : null;
               return (
-                <div className="deal-card" key={`${wm.upc || amz.asin || wm.link || i}`}>
+                <div className="deal-card" key={`${wm.product_id || amz.asin || wm.link || i}`}>
                   <div className="thumb-wrap">
                     {wm.thumbnail ? (
                       <img src={wm.thumbnail} alt={wm.title || "thumbnail"} />
@@ -353,11 +385,11 @@ export default function Dashboard() {
                     </div>
 
                     <div className="row tiny">
-                      <span>UPC: {wm.upc || "—"}</span>
                       <span>ASIN: {amz.asin || "—"}</span>
+                      <span>Category: {wm.category || "—"}</span>
                     </div>
                     <div className="row tiny">
-                      <span>Category: {wm.category || "—"}</span>
+                      <span>Match: {amz.match_score != null ? Number(amz.match_score).toFixed(2) : "—"}</span>
                       <span>Checked: {amz.checked_at ? new Date(amz.checked_at).toLocaleString() : "—"}</span>
                     </div>
                   </div>
@@ -370,7 +402,6 @@ export default function Dashboard() {
         </div>
       </main>
 
-      {/* page-specific styles */}
       <style jsx>{`
         .dash-wrap {
           position: relative;
@@ -480,7 +511,7 @@ export default function Dashboard() {
         .wm-row.small { font-size: 0.8rem; opacity: 0.8; }
         .wm-price { font-weight: 800; }
 
-        /* NEW: deals grid */
+        /* Deals grid */
         .deals-grid {
           margin-top: 1rem;
           display: grid;
@@ -529,21 +560,10 @@ export default function Dashboard() {
         .savings { font-weight: 800; color: #8fffbc; }
       `}</style>
 
-      {/* global styles align with Home page */}
       <style jsx global>{`
-        html,
-        body,
-        #__next {
-          height: 100%;
-          background: #1b0633;
-        }
-        body {
-          margin: 0;
-          overscroll-behavior: none;
-        }
-        * {
-          box-sizing: border-box;
-        }
+        html, body, #__next { height: 100%; background: #1b0633; }
+        body { margin: 0; overscroll-behavior: none; }
+        * { box-sizing: border-box; }
       `}</style>
     </div>
   );
