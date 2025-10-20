@@ -84,25 +84,16 @@ async def serp_get(url: str, q: dict):
 
 
 # Type-safe Mongo “to number”
-def to_num(expr: Any) -> Dict[str, Any]:
+def to_num(expr):
     """
-    Coerce expr (which might be number or string like '$12.99' or '1,299') to a double.
-    Uses $literal to ensure '$' is treated as a literal, not a field path.
+    Convert expr to a float by stripping everything except digits and '.'.
+    Avoids '$' field-path issues entirely.
     """
     return {
         "$toDouble": {
-            "$replaceAll": {
-                "input": {
-                    "$replaceAll": {
-                        "input": {
-                            # convert whatever we have into a string safely
-                            "$toString": {"$ifNull": [expr, "0"]}
-                        },
-                        "find": {"$literal": ","},
-                        "replacement": ""
-                    }
-                },
-                "find": {"$literal": "$"},
+            "$regexReplace": {
+                "input": {"$toString": {"$ifNull": [expr, "0"]}},
+                "regex": {"$literal": "[^0-9.]"},   # keep only digits and dot
                 "replacement": ""
             }
         }
