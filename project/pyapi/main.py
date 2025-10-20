@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorClient
 from typing import Optional, Dict, Any, Tuple, List
 from pydantic import BaseModel, Field
@@ -187,3 +187,169 @@ async def walmart_scrape(req: WalmartScrapeRequest):
         total_processed=processed,
         sample_keys=sample_keys,
     )
+
+
+# main.py (additions)
+import os, re, time
+from datetime import datetime, timedelta
+
+SERPAPI_KEY = os.getenv("SERPAPI_KEY")
+MONGO_URL = os.getenv("MONGO_URL")
+MONGO_DB  = os.getenv("MONGO_DB", "MongoDB")
+client = AsyncIOMotorClient(MONGO_URL); db = client[MONGO_DB]
+WM_COLL  = os.getenv("MONGO_WALMART_COLLECTION","walmart_items")
+AMZ_COLL = os.getenv("MONGO_AMAZON_COLLECTION","amazon_offers")
+
+def parse_price(v):
+    if v is None: return None
+    if isinstance(v, (int,float)): return float(v)
+    s = str(v).replace(",","")
+    m = re.search(r"(\d+(?:\.\d{1,2})?)", s)
+    return float(m.group(1)) if m else None
+
+async def serp_amazon_by_upc(upc: str):
+    if not SERPAPI_KEY:
+        raise HTTPException(500, "SERPAPI_KEY not set")
+    # Option 1: use SerpAPI amazon engine with q=upc
+    params = {
+        "engine": "amazon", "amazon_domain": "amazon.com",
+        "q": upc, "gl": "us", "hl": "en", "api_key": SERPAPI_KEY
+    }
+    async with httpx.AsyncClient(timeout=30) as c:
+        r = await c.get("https://serpapi.com/search.json", params=params)
+        r.raise_for_status(); data = r.json()
+    # pick best priced organic result
+    best = None; best_score = -1
+    for item in data.get("organic_results", []):
+        p = parse_price(item.get("price"))
+        if p is None: continue
+        # prefer results that mention the upc or look like exact product (simple heuristic)
+        score = 1.0
+        t = (item.get("title") or "").lower()
+        if upc in (item.get("asin") or "").lower(): score += 0.3
+        if "amazon's choice" in (item.get("badge") or "").lower(): score += 0.1
+        if len(t) < 200: score += 0.05  # avoid mega-bundle titles
+        if score > best_score: best, best_score = item, score
+    return best
+
+class IndexAmazonRequest(BaseModel):
+    category: str | None = None
+    limit_upcs: int = 50
+    recache_hours: int = 72
+    max_serp_calls: int = 25
+
+@app.post("/amazon/index-by-upc")
+async def index_amazon_by_upc(req: IndexAmazonRequest):
+    """Find distinct UPCs from walmart_items (optionally by category), and cache Amazon offers for those UPCs."""
+    if not SERPAPI_KEY: raise HTTPException(500, "SERPAPI_KEY not set")
+    match = {"upc": {"$exists": True, "$ne": None}}
+    if req.category:
+        match["category"] = req.category
+    # distinct UPCs, cheapest-first to prioritize likely wins
+    upcs = await db[WM_COLL].distinct("upc", match)
+    # Cap to limit_upcs
+    upcs = upcs[:req.limit_upcs]
+
+    cutoff = datetime.utcnow() - timedelta(hours=req.recache_hours)
+    to_fetch = []
+    for u in upcs:
+        cached = await db[AMZ_COLL].find_one({"key_type":"upc","key_val":u,"checked_at":{"$gte":cutoff}})
+        if not cached:
+            to_fetch.append(u)
+    to_fetch = to_fetch[:req.max_serp_calls]
+
+    fetched = 0; cached_count = len(upcs) - len(to_fetch); failures = 0
+    for upc in to_fetch:
+        amz = await serp_amazon_by_upc(str(upc))
+        if not amz:
+            failures += 1; continue
+        doc = {
+            "key_type":"upc", "key_val": str(upc),
+            "amz": {"asin": amz.get("asin"), "title": amz.get("title"), "link": amz.get("link"), "brand": amz.get("brand")},
+            "price": amz.get("price"),
+            "checked_at": datetime.utcnow()
+        }
+        await db[AMZ_COLL].update_one({"key_type":"upc","key_val": str(upc)}, {"$set": doc}, upsert=True)
+        fetched += 1
+        time.sleep(0.5)  # be gentle
+
+    return {"distinct_upcs": len(upcs), "cached": cached_count, "fetched_now": fetched, "failures": failures}
+
+
+@app.get("/deals/by-category")
+async def deals_by_category(
+    category: str = Query(...),
+    min_abs: float = 5.0,
+    min_pct: float = 0.20,
+    limit: int = 50
+):
+    """
+    Join walmart_items with amazon_offers on UPC and return items where Walmart is cheaper by thresholds.
+    """
+    pipeline = [
+        {"$match": {"category": category, "upc": {"$exists": True, "$ne": None}}},
+        {"$lookup": {
+            "from": AMZ_COLL,
+            "let": {"u": "$upc"},
+            "pipeline": [
+                {"$match": {"$expr": {"$and":[{"$eq":["$key_type","upc"]},{"$eq":["$key_val","$$u"]}]}}},
+                {"$sort": {"checked_at": -1}},
+                {"$limit": 1}
+            ],
+            "as": "amz"
+        }},
+        {"$unwind": "$amz"},
+        {"$addFields": {
+            "wm_price_num": {"$toDouble": {"$ifNull": ["$price", 0]}},
+            "amz_price_num": {
+                "$toDouble": {
+                    "$ifNull": [
+                        {"$arrayElemAt": [
+                            {"$filter": {
+                                "input": [
+                                    {"$toDouble": {"$ifNull": ["$amz.price", None]}},
+                                    {"$toDouble": {"$ifNull": ["$amz.price.value", None]}},
+                                ],
+                                "as": "p", "cond": {"$gt": ["$$p", 0]}
+                            }}, 0
+                        ]},
+                        0
+                    ]
+                }
+            }
+        }},
+        {"$addFields": {
+            "diff": {"$subtract": ["$amz_price_num", "$wm_price_num"]},
+            "pct": {
+                "$cond": [{"$gt": ["$amz_price_num", 0]},
+                          {"$divide": [{"$subtract": ["$amz_price_num","$wm_price_num"]}, "$amz_price_num"]},
+                          0]
+            }
+        }},
+        {"$match": {"diff": {"$gte": min_abs}, "pct": {"$gte": min_pct}}},
+        {"$project": {
+            "_id": 0,
+            "wm": {
+                "title": "$title",
+                "price": "$wm_price_num",
+                "brand": "$brand",
+                "link": "$link",
+                "thumbnail": "$thumbnail",
+                "upc": "$upc"
+            },
+            "amz": {
+                "asin": "$amz.amz.asin",
+                "title": "$amz.amz.title",
+                "price": "$amz_price_num",
+                "link": "$amz.amz.link",
+                "brand": "$amz.amz.brand",
+                "checked_at": "$amz.checked_at"
+            },
+            "savings_abs": "$diff",
+            "savings_pct": {"$multiply": ["$pct", 100]}
+        }},
+        {"$sort": {"savings_abs": -1, "savings_pct": -1}},
+        {"$limit": limit}
+    ]
+    docs = await db[WM_COLL].aggregate(pipeline).to_list(limit)
+    return {"count": len(docs), "deals": docs}
