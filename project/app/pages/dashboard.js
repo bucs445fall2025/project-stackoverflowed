@@ -162,7 +162,7 @@ export default function Dashboard() {
       });
       if (dealCategory.trim()) params.set("category", dealCategory.trim());
 
-      const r = await fetch(`${PYAPI_BASE}/deals/by-title?${params.toString()}`);
+      const r = await fetch(`${PYAPI_BASE}/deals/by-category?${params.toString()}`);
       const data = await r.json();
       if (!r.ok) throw new Error(data?.detail || data?.error || "Failed to fetch deals");
       const arr = Array.isArray(data.deals) ? data.deals : [];

@@ -395,6 +395,80 @@ async def deals_by_title(
     docs = await db[WM_COLL].aggregate(pipeline).to_list(limit)
     return {"count": len(docs), "deals": docs}
 
+
+@app.get("/deals/by-category")
+async def deals_by_category(
+    category: str = Query("", description="Optional category filter"),
+    min_pct: float = Query(0.20, description="Minimum percent savings, 0.20 = 20%"),
+    min_abs: float = Query(5.0, description="Minimum absolute savings in dollars"),
+    limit: int = Query(24, description="Max deals to return")
+):
+    """Compare Walmart vs Amazon items by fuzzy title matching and return deals."""
+
+    wm_query = {}
+    if category:
+        wm_query["category"] = {"$regex": category, "$options": "i"}
+
+    wm_items = await db["walmart_items"].find(wm_query).to_list(length=500)
+    amz_items = await db["amazon_items"].find({}).to_list(length=1000)
+
+    deals = []
+
+    for wm in wm_items:
+        wm_price = wm.get("price") or wm.get("raw", {}).get("primary_offer", {}).get("offer_price")
+        if wm_price is None:
+            continue
+
+        wm_title = wm.get("title") or wm.get("raw", {}).get("title", "")
+        if not wm_title:
+            continue
+
+        # find best Amazon match by title
+        best_match = None
+        best_score = 0
+        for amz in amz_items:
+            amz_title = amz.get("title") or amz.get("raw", {}).get("title", "")
+            if not amz_title:
+                continue
+            score = fuzz.token_set_ratio(wm_title, amz_title)
+            if score > best_score:
+                best_score = score
+                best_match = amz
+
+        if best_match and best_score >= 70:  # threshold
+            amz_price = best_match.get("price") or best_match.get("raw", {}).get("price")
+            if not amz_price:
+                continue
+
+            savings_abs = amz_price - wm_price
+            savings_pct = savings_abs / amz_price if amz_price > 0 else 0
+
+            if savings_abs >= min_abs and savings_pct >= min_pct:
+                deals.append({
+                    "wm": {
+                        "title": wm_title,
+                        "price": wm_price,
+                        "thumbnail": wm.get("thumbnail"),
+                        "link": wm.get("link"),
+                        "upc": wm.get("upc"),
+                        "category": wm.get("category"),
+                    },
+                    "amz": {
+                        "title": best_match.get("title"),
+                        "price": amz_price,
+                        "asin": best_match.get("asin"),
+                        "link": best_match.get("link"),
+                        "checked_at": best_match.get("checked_at"),
+                    },
+                    "savings_abs": savings_abs,
+                    "savings_pct": savings_pct,
+                    "match_score": best_score
+                })
+
+    # sort best savings first
+    deals.sort(key=lambda d: d["savings_abs"], reverse=True)
+
+    return {"deals": deals[:limit]}
 # ──────────────────────────────────────────────────────────────────────────────
 # One-time normalizer for older docs (optional)
 # ──────────────────────────────────────────────────────────────────────────────

@@ -4,3 +4,4 @@ pydantic==2.9.2
 motor==3.6.0          # 👈 async MongoDB driver (wraps pymongo)
 python-dotenv==1.0.1  # (if you use .env)
 httpx
+rapidfuzz
