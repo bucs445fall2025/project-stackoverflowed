@@ -12,7 +12,7 @@ app = FastAPI()
 # Mongo connection
 MONGO_URL = os.getenv("MONGO_URL")
 client = AsyncIOMotorClient(MONGO_URL)
-db = client["your_db_name"]  # replace with actual DB name in Railway
+db = client["MongoDB"]  
 
 @app.get("/")
 async def root():
