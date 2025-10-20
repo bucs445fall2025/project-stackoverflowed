@@ -37,3 +37,36 @@ router.get("/walmart/items", async (req, res) => {
 });
 
 module.exports = router;
+
+
+//Should probably put these routes below in a separate amazon cache file , this is calling amazon serp routes
+
+// POST /api/amazon/index-by-title  -> proxy to PyAPI /amazon/index-by-title
+router.post("/index-by-title", async (req, res) => {
+  try {
+    const r = await fetch(`${process.env.PYAPI_URL}/amazon/index-by-title`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req.body || {}),
+    });
+    const data = await r.json();
+    return res.status(r.status).json(data);
+  } catch (err) {
+    console.error("Proxy error (index-by-title):", err);
+    return res.status(500).json({ error: "Proxy to pyapi failed" });
+  }
+});
+
+// GET /api/amazon/deals/by-title  -> proxy to PyAPI /deals/by-title
+router.get("/deals/by-title", async (req, res) => {
+  try {
+    const qs = new URLSearchParams(req.query);
+    const url = `${process.env.PYAPI_URL}/deals/by-title?${qs.toString()}`;
+    const r = await fetch(url, { headers: { "Cache-Control": "no-cache" } });
+    const data = await r.json();
+    return res.status(r.status).json(data);
+  } catch (err) {
+    console.error("Proxy error (deals/by-title):", err);
+    return res.status(500).json({ error: "Proxy to pyapi failed" });
+  }
+});

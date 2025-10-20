@@ -23,6 +23,8 @@ const dbDebug = require("./routes/dbDebug");
 app.use("/api", dbDebug);
 const usersDebug = require("./routes/usersDebug");
 app.use("/api", usersDebug);
+const walmartRoutes = require('./routes/walmartRoutes');
+app.use('/api/amazon', walmartRoutes);
 
 
 // Global error handler for routes

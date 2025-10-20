@@ -134,7 +134,7 @@ export default function Dashboard() {
         min_score: dealMinScore,
         ...(dealCategory.trim() ? { category: dealCategory.trim() } : {}),
       };
-      const r = await fetch(`${PYAPI_BASE}/amazon/index-by-title`, {
+      const r = await fetch(`${API_BASE}/api/amazon/index-by-title`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -162,7 +162,7 @@ export default function Dashboard() {
       });
       if (dealCategory.trim()) params.set("category", dealCategory.trim());
 
-      const r = await fetch(`${PYAPI_BASE}/deals/by-category?${params.toString()}`);
+      const r = await fetch(`${API_BASE}/api/amazon/deals/by-title?${params.toString()}`)
       const data = await r.json();
       if (!r.ok) throw new Error(data?.detail || data?.error || "Failed to fetch deals");
       const arr = Array.isArray(data.deals) ? data.deals : [];
