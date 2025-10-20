@@ -83,7 +83,7 @@ export default function Dashboard() {
     setWmMsg("");
     try {
       const body = { query: "protein powder", max_pages: 1, delay_ms: 700 };
-      const r = await fetch(`${API_BASE}/api/amazon/walmart/scrape`, {
+      const r = await fetch(`${API_BASE}/walmart/scrape`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -104,7 +104,7 @@ export default function Dashboard() {
     setWmLoading(true);
     setWmMsg("");
     try {
-      const r = await fetch(`${API_BASE}/api/amazon/walmart/items?limit=30`);
+      const r = await fetch(`${API_BASE}/walmart/items?limit=30`);
       const data = await r.json();
       if (!r.ok) throw new Error(data?.error || "Failed to load items");
       setWmItems(Array.isArray(data.items) ? data.items : []);
