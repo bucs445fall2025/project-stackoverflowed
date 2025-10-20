@@ -4,6 +4,7 @@
 # 3) Join Walmart+Amazon to return deals where Walmart is cheaper by %/$ thresholds
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from motor.motor_asyncio import AsyncIOMotorClient
 from typing import Optional, Dict, Any, List
@@ -15,6 +16,14 @@ import re
 import difflib
 
 app = FastAPI(title="Walmart vs Amazon Deals (Title Match)")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],   # or restrict to your frontend domain
+    allow_credentials=True,
+    allow_methods=["*"],   # includes OPTIONS, GET, POST, etc
+    allow_headers=["*"],
+)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Config
