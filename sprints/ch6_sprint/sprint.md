@@ -53,20 +53,17 @@ A summary of our project is that its a web-based tool for Amazon FBA resellers t
 N/A
 
 ### Requirement Target
-
-Implement requirement checking on the password entered by the user on account creation. Check for minimum length, whether or not it has a special character, whether or not it has a number, and show how "strong" it is.
+Implement serpAPI, a 3rd party API that can be used to scrape Walmart for certain products, the prices associated with these products and more. This info will be used to compare to amazon products to see if there are cheaper products listed on Walmart compared to Amazon counterpart
 
 ### User Stories
-
-user_story4 is the closest to our current goal, we have account creation completed, but this is a feature we should add to help make things more secure and feel more official.
+User_story1 would be the closest to this requirement goal, since this is related to having a dashboard with important stats such as best selling products, etc. This would contribute to that goal of knowing what product can be beneficial to buy since there is a price difference where it can be purchased somewhere else for cheaper
 
 ### Planning
-
-The plan is to check for requirements on the password entered by the user during account creation. We should also be able to make progress on unrelated things as well.
+The plan is to research serpAPI, which seems to be a good 3rd party API for this goal. We plan on researching the documentation on what type of data can be pulled, how to call API etc. Since this is a python API, we have to setup some sort of python service in our backend to use this API.
 
 ### Action Items
-
-We need to password strength verification. We still need to decide whether or not we will implement 2 factor authentication.
+We need to implement some sort of python API in backend that can interact with current backend
+We need to research into how to use serpAPI and how to set it up
 
 ### Issues and Risks
 
@@ -74,6 +71,6 @@ N/A
 
 ### Team Work Assignments
 
-Nick will work on improving on and documenting our current implementation
-Jackson will implement the requirement checking on the password
-Sam will work on more UX/front end design
+Nick will work on implementing some sort of Python backend that integrates with our current backend
+Jackson will research into the possibilities of using serpAPI, such as what data can be pulled, what sites it works on etc
+Sam will work on more UX/front end design of how the data will be displayed
