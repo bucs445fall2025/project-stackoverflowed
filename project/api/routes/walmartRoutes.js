@@ -65,7 +65,7 @@ module.exports = router;
 // POST /api/amazon/index-by-title  -> proxy to PyAPI /amazon/index-by-title
 router.post("/index-by-title", async (req, res) => {
   try {
-    const r = await fetch(`${PYAPI}/amazon/index-by-title`, {
+    const r = await fetch(`${PYAPI_URL}/amazon/index-by-title`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req.body),
@@ -81,7 +81,7 @@ router.post("/index-by-title", async (req, res) => {
 // GET /api/amazon/deals/by-title  -> proxy to PyAPI /deals/by-title
 router.get("/deals/by-title", async (req, res) => {
   try {
-    const url = `${PYAPI}/deals/by-title?${new URLSearchParams(req.query)}`;
+    const url = `${PYAPI_URL}/deals/by-title?${new URLSearchParams(req.query)}`;
     const r = await fetch(url);
     const payload = await forwardJsonOrText(r);
     res.status(r.status).json(payload);
