@@ -287,49 +287,86 @@ class IndexAmazonByTitleReq(BaseModel):
 
 @app.post("/amazon/index-by-title")
 async def index_amazon_by_title(req: IndexAmazonByTitleReq):
+    """
+    Build/refresh the Amazon cache by fuzzy title/brand for Walmart items.
+    - Skips docs without a product_id (and won't crash).
+    - Respects recache_hours so we don't hammer SerpAPI.
+    - Writes either a hit (amz + price) or a miss stub for each pid.
+    """
     if not SERPAPI_KEY:
         raise HTTPException(500, "SERPAPI_KEY not set")
 
-    match: Dict[str, Any] = {"title": {"$exists": True, "$ne": None}}
+    # Only work on items that have both a title and a product_id
+    match: Dict[str, Any] = {
+        "title": {"$exists": True, "$ne": None},
+        "product_id": {"$exists": True, "$ne": None},
+    }
     if req.category:
         match["category"] = req.category
 
     cutoff = datetime.utcnow() - timedelta(hours=req.recache_hours)
 
-    # candidates
-    items = await db[WM_COLL].find(
-        match, {"_id":1,"product_id":1,"title":1,"brand":1,"price":1}
+    # Candidate Walmart items
+    items: List[Dict[str, Any]] = await db[WM_COLL].find(
+        match,
+        {"_id": 1, "product_id": 1, "title": 1, "brand": 1, "price": 1},
     ).limit(req.limit_items).to_list(req.limit_items)
 
-    # pick those not recently cached
+    # Filter to those not recently cached
     to_fetch: List[Dict[str, Any]] = []
+    skipped_no_pid = 0
     for it in items:
-        pid = str(it["product_id"])
+        pid = str(it.get("product_id") or "")
+        if not pid:
+            skipped_no_pid += 1
+            continue
+
         cached = await db[AMZ_COLL].find_one(
-            {"key_type":"wm_pid","key_val":pid,"checked_at":{"$gte":cutoff}}
+            {"key_type": "wm_pid", "key_val": pid, "checked_at": {"$gte": cutoff}}
         )
         if not cached:
             to_fetch.append(it)
-    to_fetch = to_fetch[:req.max_serp_calls]
 
-    fetched = 0; misses = 0
+    # Respect max_serp_calls
+    to_fetch = to_fetch[: max(0, req.max_serp_calls)]
+
+    fetched = 0
+    misses = 0
+
     for it in to_fetch:
-        pid = str(it["product_id"])
+        pid = str(it.get("product_id") or "")
+        if not pid:
+            skipped_no_pid += 1
+            continue
+
         try:
-            amz = await serp_amazon_by_title(it.get("title",""), it.get("brand"))
-            if not amz or (amz.get("match_score") or 0) < req.min_score:
+            amz = await serp_amazon_by_title(it.get("title", ""), it.get("brand"))
+            ok = bool(amz) and float(amz.get("match_score") or 0.0) >= float(req.min_score)
+
+            if not ok:
+                # record a miss so we don't keep retrying immediately
                 await db[AMZ_COLL].update_one(
-                    {"key_type":"wm_pid","key_val":pid},
-                    {"$set":{
-                        "key_type":"wm_pid","key_val":pid,"checked_at":datetime.utcnow(),
-                        "miss":True,"last_title":it.get("title"),"last_brand":it.get("brand")
+                    {"key_type": "wm_pid", "key_val": pid},
+                    {"$set": {
+                        "key_type": "wm_pid",
+                        "key_val": pid,
+                        "checked_at": datetime.utcnow(),
+                        "miss": True,
+                        "last_title": it.get("title"),
+                        "last_brand": it.get("brand"),
                     }},
-                    upsert=True
+                    upsert=True,
                 )
                 misses += 1
             else:
+                # normalize price field (SerpAPI sometimes puts it in price or price_num)
+                amz_price = amz.get("price")
+                if amz_price is None:
+                    amz_price = amz.get("price_num")
+
                 doc = {
-                    "key_type":"wm_pid", "key_val": pid,
+                    "key_type": "wm_pid",
+                    "key_val": pid,
                     "amz": {
                         "asin": amz.get("asin"),
                         "title": amz.get("title"),
@@ -337,23 +374,33 @@ async def index_amazon_by_title(req: IndexAmazonByTitleReq):
                         "brand": amz.get("brand"),
                         "match_score": amz.get("match_score"),
                     },
-                    "price": amz.get("price") if amz.get("price") is not None else amz.get("price_num"),
+                    "price": amz_price,
                     "checked_at": datetime.utcnow(),
                     "last_title": it.get("title"),
                     "last_brand": it.get("brand"),
                 }
+
                 await db[AMZ_COLL].update_one(
-                    {"key_type":"wm_pid","key_val":pid},
-                    {"$set":doc},
-                    upsert=True
+                    {"key_type": "wm_pid", "key_val": pid},
+                    {"$set": doc},
+                    upsert=True,
                 )
                 fetched += 1
+
         except Exception:
+            # treat any error as a miss and move on
             misses += 1
         finally:
+            # be nice to SerpAPI
             await asyncio.sleep(0.4)
 
-    return {"considered": len(items), "fetched_now": fetched, "misses": misses}
+    return {
+        "considered": len(items),
+        "queued": len(to_fetch),
+        "fetched_now": fetched,
+        "misses": misses,
+        "skipped_no_pid": skipped_no_pid,
+    }
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Deals (Title/Brand join)
@@ -366,7 +413,10 @@ async def deals_by_title(
     min_score: float = Query(0.62, description="Minimum title match score 0..1"),
     limit: int = Query(50, ge=1, le=200),
 ):
-    match: Dict[str, Any] = {"title": {"$exists": True, "$ne": None}}
+    match: Dict[str, Any] = {
+    "title": {"$exists": True, "$ne": None},
+    "product_id": {"$exists": True, "$ne": None},
+}
     if category:
         match["category"] = category
 
