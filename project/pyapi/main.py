@@ -493,8 +493,8 @@ async def walmart_enrich_upc(limit: int = 25, recrawl_hours: int = 168):
     }
 
     items = await db[WM_COLL].find(
-        q, {"_id": 1, "product_id": 1, "title": 1}
-    ).limit(limit).to_list(limit)
+    q, {"_id": 1, "product_id": 1, "title": 1, "link": 1}
+).limit(limit).to_list(limit)
 
     checked = 0
     updated = 0
