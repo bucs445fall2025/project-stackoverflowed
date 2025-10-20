@@ -22,7 +22,8 @@ const WalmartItemSchema = new mongoose.Schema({
   raw: mongoose.Schema.Types.Mixed,
 }, { timestamps: true });
 
+
 // OPTIONAL: in prod you might prefer controlled index creation:
-// WalmartItemSchema.set('autoIndex', false);
+WalmartItemSchema.set('autoIndex', false);
 
 module.exports = mongoose.model("WalmartItem", WalmartItemSchema, "walmart_items");

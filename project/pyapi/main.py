@@ -532,3 +532,15 @@ async def fix_indexes():
     out["after"] = await coll.index_information()
     return out
 
+@app.post("/admin/drop-legacy-key-index")
+async def drop_legacy_key_index():
+    coll = db[WM_COLL]
+    out = {"before": await coll.index_information()}
+    try:
+        await coll.drop_index("key_1")
+        out["dropped"] = "key_1"
+    except Exception as e:
+        out["drop_error"] = str(e)
+    out["after"] = await coll.index_information()
+    return out
+
