@@ -84,17 +84,30 @@ async def serp_get(url: str, q: dict):
 
 
 # Type-safe Mongo “to number”
-def to_num(expr):
+def to_num(expr: Any) -> Dict[str, Any]:
     """
-    Convert expr to a float by stripping everything except digits and '.'.
-    Avoids '$' field-path issues entirely.
+    Mongo 4.2-friendly numeric coercion:
+    - If it's already a number -> toDouble
+    - Else regexFind the first number (digits + optional .decimals) from the string.
+    - If nothing matches, return 0.
     """
     return {
-        "$toDouble": {
-            "$regexReplace": {
-                "input": {"$toString": {"$ifNull": [expr, "0"]}},
-                "regex": {"$literal": "[^0-9.]"},   # keep only digits and dot
-                "replacement": ""
+        "$let": {
+            "vars": {
+                "valStr": {"$toString": {"$ifNull": [expr, ""]}},
+                "m": {
+                    "$regexFind": {
+                        "input": {"$toString": {"$ifNull": [expr, ""]}},
+                        "regex": r"(\d+(?:\.\d{1,2})?)"
+                    }
+                }
+            },
+            "in": {
+                "$cond": [
+                    {"$gt": [{"$size": {"$ifNull": ["$$m.captures", []]}}, 0]},
+                    {"$toDouble": {"$arrayElemAt": ["$$m.captures", 0]}},
+                    0.0
+                ]
             }
         }
     }
@@ -342,63 +355,74 @@ async def deals_by_title(
     if category:
         match["category"] = category
 
-    pipeline: List[Dict[str, Any]] = [
-        {"$match": match},
-        {"$lookup": {
-            "from": AMZ_COLL,
-            "let": {"pid": "$product_id"},
-            "pipeline": [
-                {"$match": {"$expr": {"$and":[
-                    {"$eq": ["$key_type","wm_pid"]},
-                    {"$eq": ["$key_val","$$pid"]}
-                ]}}},
-                {"$sort": {"checked_at": -1}},
-                {"$limit": 1}
-            ],
-            "as": "amz"
-        }},
-        {"$unwind": "$amz"},
-        {"$match": {"amz.miss": {"$ne": True}}},
-        {"$match": {"amz.amz.match_score": {"$gte": min_score}}},
-        {"$addFields": {
-            "wm_price_num": to_num("$price"),
-            "amz_price_num": to_num({"$ifNull": ["$amz.price", "0"]})
-        }},
-        {"$addFields": {
-            "diff": {"$subtract": ["$amz_price_num", "$wm_price_num"]},
-            "pct": {
-                "$cond": [{"$gt": ["$amz_price_num", 0]},
-                          {"$divide": [{"$subtract": ["$amz_price_num","$wm_price_num"]}, "$amz_price_num"]},
-                          0]
-            }
-        }},
-        {"$match": {"diff": {"$gte": min_abs}, "pct": {"$gte": min_pct}}},
-        {"$project": {
-            "_id": 0,
-            "wm": {
-                "title": "$title",
-                "price": {"$round": ["$wm_price_num", 2]},
-                "brand": "$brand",
-                "link": "$link",
-                "thumbnail": "$thumbnail",
-                "category": "$category",
-                "product_id": "$product_id",
-            },
-            "amz": {
-                "asin": "$amz.amz.asin",
-                "title": "$amz.amz.title",
-                "price": {"$round": ["$amz_price_num", 2]},
-                "link": "$amz.amz.link",
-                "brand": "$amz.amz.brand",
-                "match_score": "$amz.amz.match_score",
-                "checked_at": "$amz.checked_at",
-            },
-            "savings_abs": {"$round": ["$diff", 2]},
-            "savings_pct": {"$round": [{"$multiply": ["$pct", 100]}, 1]}
-        }},
-        {"$sort": {"savings_abs": -1, "savings_pct": -1}},
-        {"$limit": limit}
-    ]
+    pipeline = [
+    {"$match": match},
+    {"$lookup": {
+        "from": AMZ_COLL,
+        "let": {"pid": "$product_id"},
+        "pipeline": [
+            {"$match": {"$expr": {"$and": [
+                {"$eq": ["$key_type", "wm_pid"]},
+                {"$eq": ["$key_val", "$$pid"]}
+            ]}}},
+            {"$sort": {"checked_at": -1}},
+            {"$limit": 1}
+        ],
+        "as": "amz"
+    }},
+    {"$unwind": "$amz"},
+    {"$match": {"amz.miss": {"$ne": True}}},
+    {"$match": {"amz.amz.match_score": {"$gte": min_score}}},
+
+    # numeric coercion (Mongo 4.2 compatible)
+    {"$addFields": {
+        "wm_price_num": to_num("$price"),
+        "amz_price_num": to_num({"$ifNull": ["$amz.price", "$amz.amz.price"]})
+    }},
+
+    # compute savings
+    {"$addFields": {
+        "diff": {"$subtract": ["$amz_price_num", "$wm_price_num"]},
+        "pct": {
+            "$cond": [
+                {"$gt": ["$amz_price_num", 0]},
+                {"$divide": [{"$subtract": ["$amz_price_num", "$wm_price_num"]}, "$amz_price_num"]},
+                0
+            ]
+        }
+    }},
+
+    # thresholds
+    {"$match": {"diff": {"$gte": min_abs}, "pct": {"$gte": min_pct}}},
+
+    # projection
+    {"$project": {
+        "_id": 0,
+        "wm": {
+            "title": "$title",
+            "price": {"$round": ["$wm_price_num", 2]},
+            "brand": "$brand",
+            "link": "$link",
+            "thumbnail": "$thumbnail",
+            "category": "$category",
+            "product_id": "$product_id",
+        },
+        "amz": {
+            "asin": "$amz.amz.asin",
+            "title": "$amz.amz.title",
+            "price": {"$round": ["$amz_price_num", 2]},
+            "link": "$amz.amz.link",
+            "brand": "$amz.amz.brand",
+            "match_score": "$amz.amz.match_score",
+            "checked_at": "$amz.checked_at",
+        },
+        "savings_abs": {"$round": ["$diff", 2]},
+        "savings_pct": {"$round": [{"$multiply": ["$pct", 100]}, 1]}
+    }},
+    {"$sort": {"savings_abs": -1, "savings_pct": -1}},
+    {"$limit": limit}
+]
+
     docs = await db[WM_COLL].aggregate(pipeline).to_list(limit)
     return {"count": len(docs), "deals": docs}
 
