@@ -181,6 +181,9 @@ async def walmart_scrape(req: WalmartScrapeRequest):
     inserted = 0
     updated = 0
     total_processed = 0
+    skipped_no_pid = 0
+    skipped_no_price = 0
+
 
     for pg in range(1, req.pages + 1):
         if total_processed >= req.max_products:
@@ -188,18 +191,23 @@ async def walmart_scrape(req: WalmartScrapeRequest):
         data = await walmart_search_page(req.query, page=pg, store_id=req.store_id)
         items = data.get("organic_results") or []
         for it in items:
-            if total_processed >= req.max_products:
-                break
-
-            # Walmart “product_id” here is the internal one, also keep us_item_id if present
+            # product id
             pid = it.get("product_id") or it.get("product_id_full") or it.get("us_item_id") or it.get("item_id")
             if not pid:
+                skipped_no_pid += 1
                 continue
 
-            price_val = parse_price(it.get("primary_offer", {}).get("price") or it.get("price"))
+            # ✅ Walmart price usually lives here:
+            po = it.get("primary_offer") or {}
+            price_val = parse_price(
+                po.get("offer_price") or  # <-- most common
+                po.get("price") or        # fallback
+                it.get("price")           # last resort
+            )
             if price_val is None:
-            # Skip items with no price so they never show up as $0 later
+                skipped_no_price += 1
                 continue
+
             doc = {
                 "product_id": str(pid),
                 "us_item_id": it.get("us_item_id"),
@@ -225,16 +233,16 @@ async def walmart_scrape(req: WalmartScrapeRequest):
                 updated += res.modified_count
             total_processed += 1
 
-        if req.delay_ms:
-            await asyncio.sleep(req.delay_ms / 1000.0)
-
-    return {
-        "query": req.query,
-        "pages_fetched": req.pages,
-        "inserted": inserted,
-        "updated": updated,
-        "total_processed": total_processed,
-    }
+        # return payload
+        return {
+            "query": req.query,
+            "pages_fetched": req.pages,
+            "inserted": inserted,
+            "updated": updated,
+            "total_processed": total_processed,
+            "skipped_no_pid": skipped_no_pid,
+            "skipped_no_price": skipped_no_price,
+        }
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Amazon via SerpAPI — match by Title/Brand
