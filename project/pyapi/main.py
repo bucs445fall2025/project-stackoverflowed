@@ -197,6 +197,9 @@ async def walmart_scrape(req: WalmartScrapeRequest):
                 continue
 
             price_val = parse_price(it.get("primary_offer", {}).get("price") or it.get("price"))
+            if price_val is None:
+            # Skip items with no price so they never show up as $0 later
+                continue
             doc = {
                 "product_id": str(pid),
                 "us_item_id": it.get("us_item_id"),
@@ -444,7 +447,10 @@ async def deals_by_title(
         "wm_price_num": to_num("$price"),
         "amz_price_num": to_num({"$ifNull": ["$amz.price", "$amz.amz.price"]})
     }},
-
+    {"$match": {
+    "wm_price_num": {"$gt": 0},
+    "amz_price_num": {"$gt": 0}
+    }},
     # compute savings
     {"$addFields": {
         "diff": {"$subtract": ["$amz_price_num", "$wm_price_num"]},
