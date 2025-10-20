@@ -83,7 +83,7 @@ export default function Dashboard() {
     setWmMsg("");
     try {
       const body = { query: "protein powder", max_pages: 1, delay_ms: 700 };
-      const r = await fetch(`${API_BASE}/walmart/scrape`, {
+      const r = await fetch(`${API_BASE}/api/amazon/walmart/scrape`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
