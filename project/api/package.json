@@ -16,9 +16,12 @@
     "express": "^4.21.2",
     "mongodb": "^5.7.0",
     "mongoose": "^8.19.1",
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^3.3.2",
+    "undici": "^7.16.0"
   },
-  "engines": { "node": "20" },
+  "engines": {
+    "node": "20"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
