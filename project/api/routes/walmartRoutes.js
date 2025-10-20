@@ -25,14 +25,14 @@ router.post("/walmart/scrape", async (req, res) => {
 // GET /api/amazon/walmart/items -> proxies to FastAPI /walmart/stats
 router.get("/walmart/items", async (req, res) => {
   try {
-    const r = await fetch(`${process.env.PYAPI_URL}/walmart/stats`);
+    const url = `${process.env.PYAPI_URL}/walmart/items?${new URLSearchParams(req.query)}`;
+    const r = await fetch(url, { headers: { "Cache-Control": "no-cache" } });
     const data = await r.json();
-
-    // Shape into items array if needed
-    res.json({ items: data.items || data });
+    res.set("Cache-Control", "no-store");
+    return res.status(r.status).json({ items: Array.isArray(data.items) ? data.items : [] });
   } catch (err) {
     console.error("Proxy error (walmart/items):", err);
-    res.status(500).json({ error: "Failed to fetch Walmart items" });
+    return res.status(500).json({ error: "Failed to fetch Walmart items" });
   }
 });
 

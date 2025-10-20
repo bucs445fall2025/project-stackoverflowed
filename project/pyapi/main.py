@@ -130,7 +130,11 @@ async def wm_stats():
     total = await db[WM_COLL].count_documents({})
     cats = await db[WM_COLL].distinct("category")
     return {"walmart_total": total, "categories": cats}
-
+@app.get("/walmart/items")
+async def walmart_items(limit: int = 30):
+    cur = db[WM_COLL].find({}, {"_id": 0}).sort([("updatedAt", -1)]).limit(limit)
+    items = await cur.to_list(length=limit)
+    return {"items": items}
 @app.get("/amazon/cache/stats")
 async def amz_stats():
     total = await db[AMZ_COLL].count_documents({})
