@@ -55,14 +55,24 @@ def parse_price(v) -> Optional[float]:
     m = PRICE_RE.search(s)
     return float(m.group(1)) if m else None
 
-async def serp_get(url: str, params: Dict[str, Any]) -> Dict[str, Any]:
-    if not SERPAPI_KEY:
-        raise HTTPException(500, "SERPAPI_KEY not set")
-    q = {**params, "api_key": SERPAPI_KEY}
-    async with httpx.AsyncClient(timeout=30) as c:
-        r = await c.get(url, params=q)
-        r.raise_for_status()
-        return r.json()
+async def serp_get(url: str, q: dict):
+    q["api_key"] = os.environ["SERPAPI_KEY"]
+
+    timeout = httpx.Timeout(30.0, connect=15.0)  # 30s total, 15s to connect
+    async with httpx.AsyncClient(timeout=timeout) as c:
+        for attempt in range(3):
+            try:
+                r = await c.get(url, params=q)
+                r.raise_for_status()
+                return r.json()
+            except httpx.ReadTimeout:
+                if attempt < 2:
+                    await asyncio.sleep(2 ** attempt + random.random())  # exponential backoff
+                    continue
+                raise HTTPException(status_code=504, detail="SerpAPI request timed out")
+            except httpx.HTTPStatusError as e:
+                raise HTTPException(status_code=e.response.status_code, detail=str(e))
+
 
 # Type-safe Mongo “to number”
 def to_num(expr: Any) -> Dict[str, Any]:
