@@ -371,3 +371,76 @@ async def amz_stats():
     upc_keys = await amz.count_documents({"key_type":"upc"})
     sample = await amz.find_one({}, {"_id":0, "key_type":1, "key_val":1, "price":1, "checked_at":1})
     return {"amazon_offers_total": total, "amazon_upc_keys": upc_keys, "sample": sample}
+
+
+
+
+#HELPERS TO PARSE UPC
+GTIN_RE = re.compile(r'"gtin\d*"\s*:\s*"(\d+)"', re.I)
+UPC_RE  = re.compile(r'"upc"\s*:\s*"(\d+)"', re.I)
+CAT_RE  = re.compile(r'"category"\s*:\s*"(.*?)"', re.I)  # from JSON-LD sometimes
+
+async def fetch_walmart_pdp_fields(url: str):
+    """
+    Fetches a Walmart PDP and tries to extract gtin/upc and category from JSON-LD.
+    Returns dict like {"upc": "...", "gtin": "...", "category": "..."} where available.
+    """
+    out = {}
+    try:
+        async with httpx.AsyncClient(timeout=30) as c:
+            r = await c.get(url, headers={"user-agent": "Mozilla/5.0"})
+            r.raise_for_status()
+            html = r.text
+    except Exception:
+        return out
+
+    m = GTIN_RE.search(html)
+    if m:
+        out["gtin"] = m.group(1)
+        # plenty of Walmart pages only provide gtin; treat it as upc when length is 12
+        if len(out["gtin"]) in (12, 13, 14):
+            out.setdefault("upc", out["gtin"])
+
+    m2 = UPC_RE.search(html)
+    if m2:
+        out["upc"] = m2.group(1)
+
+    mc = CAT_RE.search(html)
+    if mc:
+        out["category"] = mc.group(1)
+
+    return out
+
+class EnrichUPCRequest(BaseException):
+    pass
+
+@app.post("/walmart/enrich-upc")
+async def walmart_enrich_upc(limit: int = 25, recrawl_hours: int = 168):
+    """
+    For items missing 'upc', fetch their PDP and extract upc/gtin/category.
+    Does NOT use SerpAPI → free.
+    """
+    cutoff = datetime.utcnow() - timedelta(hours=recrawl_hours)
+    q = {
+        "upc": {"$in": [None, ""]},
+        "link": {"$exists": True, "$ne": None},
+        "$or": [{"enriched_at": {"$exists": False}}, {"enriched_at": {"$lt": cutoff}}],
+    }
+
+    items = await db[WM_COLL].find(q, {"_id": 1, "link": 1, "title": 1}).limit(limit).to_list(limit)
+    updated = 0
+    for it in items:
+        url = it.get("link")
+        if not url:
+            continue
+        fields = await fetch_walmart_pdp_fields(url)
+        if not fields:
+            # still mark as attempted to avoid hammering
+            await db[WM_COLL].update_one({"_id": it["_id"]}, {"$set": {"enriched_at": datetime.utcnow()}})
+            continue
+        fields["enriched_at"] = datetime.utcnow()
+        fields["upc_source"] = "pdp"
+        await db[WM_COLL].update_one({"_id": it["_id"]}, {"$set": fields})
+        updated += 1
+        time.sleep(0.3)  # gentle
+    return {"checked": len(items), "updated": updated}
