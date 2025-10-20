@@ -518,3 +518,17 @@ async def walmart_enrich_upc(limit: int = 25, recrawl_hours: int = 168):
             await asyncio.sleep(0.4)
 
     return {"checked": checked, "updated": updated}
+
+
+@app.post("/admin/fix-indexes")
+async def fix_indexes():
+    coll = db[WM_COLL]
+    out = {"before": await coll.index_information()}
+    try: await coll.drop_index("key_1")
+    except: pass
+    await coll.create_index("product_id", unique=True, sparse=True)
+    await coll.create_index("upc", sparse=True)
+    await coll.create_index([("updatedAt", -1)])
+    out["after"] = await coll.index_information()
+    return out
+
