@@ -114,7 +114,7 @@ async def root():
 @app.get("/walmart/stats")
 async def wm_stats():
     total = await db[WM_COLL].count_documents({})
-    with_upc = await db[WM_COLL].count_documents({"upc": {"$exists": True, "$ne": None, "$ne": ""}})
+    with_upc = await db[WM_COLL].count_documents({"upc": {"$exists": True, "$nin": [None, ""]}})
     cats = await db[WM_COLL].distinct("category")
     return {"walmart_total": total, "walmart_with_upc": with_upc, "categories": cats}
 
@@ -143,20 +143,61 @@ async def walmart_product_detail(product_id: str) -> Dict[str, Any]:
         {"engine": "walmart_product", "product_id": product_id, "hl": "en", "gl": "us"},
     )
 
+UPC12_RE = re.compile(r"\b(\d{12})\b")
+
+def _maybe_upc_from_text(txt: str) -> Optional[str]:
+    if not txt: return None
+    m = UPC12_RE.search(str(txt))
+    return m.group(1) if m else None
+
 def extract_upc_block(detail_payload: Dict[str, Any]) -> Dict[str, Any]:
-    """Pull upc/gtin/category from walmart_product response."""
+    """
+    Pull upc/gtin/category from walmart_product response.
+    Also scan feature_item/specs for a UPC line.
+    """
     out: Dict[str, Any] = {}
     prod = (detail_payload or {}).get("product") or {}
+
+    # direct id fields
     for k in ("upc", "gtin", "gtin13", "gtin14", "ean"):
         if prod.get(k):
             out[k] = str(prod[k])
+
+    # feature_item can be a list of {name,value} or strings
+    feat = prod.get("feature_item")
+    if feat:
+        for item in (feat if isinstance(feat, list) else [feat]):
+            if isinstance(item, dict):
+                name = str(item.get("name") or "").lower()
+                val  = str(item.get("value") or "")
+                if "upc" in name:
+                    cand = _maybe_upc_from_text(val) or val.strip()
+                    if cand: out.setdefault("upc", cand)
+                else:
+                    cand = _maybe_upc_from_text(val)
+                    if cand: out.setdefault("upc", cand)
+            else:
+                cand = _maybe_upc_from_text(str(item))
+                if cand: out.setdefault("upc", cand)
+
+    # sometimes “specifications” / “attributes”
+    for spec_key in ("specifications", "attributes"):
+        specs = prod.get(spec_key)
+        if isinstance(specs, dict):
+            for k, v in specs.items():
+                if "upc" in str(k).lower():
+                    cand = _maybe_upc_from_text(v)
+                    if cand: out.setdefault("upc", cand)
+
+    # category
     if prod.get("category"):
         out["category"] = prod["category"]
     elif prod.get("categories"):
         cats = [str(x) for x in prod["categories"] if x]
-        if cats:
-            out["category"] = " / ".join(cats)
+        if cats: out["category"] = " / ".join(cats)
+
     return out
+
 
 class WalmartScrapeRequest(BaseModel):
     query: str = Field(..., description="Walmart search query")
@@ -200,6 +241,19 @@ async def walmart_scrape(req: WalmartScrapeRequest):
                 "category": it.get("category"),
                 "updatedAt": now_utc(),
             }
+
+            if req.enrich_upc and req.max_detail_calls > 0:
+            # throttle: only do as many as allowed per request
+                if total_processed < req.max_detail_calls:
+                    try:
+                        detail = await walmart_product_detail(str(pid))
+                        blk = extract_upc_block(detail)
+                        if blk:
+                            doc.update(blk)
+                            doc["enriched_at"] = now_utc()
+                            doc["upc_source"] = "walmart_product/feature_item"
+                    except Exception:
+                        pass
             res = await db[WM_COLL].update_one(
                 {"product_id": str(pid)},
                 {"$setOnInsert": {"createdAt": now_utc()}, "$set": doc},
@@ -491,6 +545,7 @@ async def walmart_enrich_upc(limit: int = 25, recrawl_hours: int = 168):
             {"product_id": {"$exists": True, "$ne": None}}
         ]
     }
+    
 
     items = await db[WM_COLL].find(
     q, {"_id": 1, "product_id": 1, "title": 1, "link": 1}
