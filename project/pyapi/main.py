@@ -1,11 +1,13 @@
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Body
 from motor.motor_asyncio import AsyncIOMotorClient
 from typing import Optional, Dict, Any, Tuple, List
 from pydantic import BaseModel, Field
 import httpx
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import asyncio
 import os
+import re
+import time
 
 app = FastAPI()
 
@@ -123,70 +125,97 @@ async def _fetch_serpapi_page(client: httpx.AsyncClient, query: str, page: int, 
     r.raise_for_status()
     return r.json()
 
-@app.post("/walmart/scrape", response_model=WalmartScrapeResult)
+class WalmartScrapeRequest(BaseModel):
+    query: str = Field(..., description="Walmart search query")
+    pages: int = Field(1, ge=1, le=20, description="How many SerpAPI pages to fetch")
+    max_products: int = Field(50, ge=1, le=500)
+    enrich_upc: bool = True
+    max_detail_calls: int = Field(15, ge=0, le=100)
+    store_id: Optional[str] = None
+    delay_ms: int = Field(400, ge=0, le=3000)
+
+@app.post("/walmart/scrape")
 async def walmart_scrape(req: WalmartScrapeRequest):
-    """
-    Pull Walmart search results from SerpAPI and upsert into Mongo.
-    Idempotent via unique 'key' index.
-    """
-    if not SERPAPI_KEY:
-        raise HTTPException(status_code=500, detail="SERPAPI_KEY not set on server")
+    inserted = 0
+    updated = 0
+    total_processed = 0
+    saved_ids: List[str] = []
 
-    inserted = updated = processed = 0
-    sample_keys: List[str] = []
-
-    # One client per request; could also reuse a global client if you prefer
-    async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
-        pages_fetched = 0
-        for page in range(1, req.max_pages + 1):
-            try:
-                data = await _fetch_serpapi_page(client, req.query, page, req.store_id)
-            except httpx.HTTPStatusError as e:
-                # SerpAPI may return 429 or 4xx when quota is hit or params invalid
-                raise HTTPException(status_code=e.response.status_code, detail=str(e))
-            except Exception as e:
-                raise HTTPException(status_code=502, detail=f"SerpAPI error: {e}")
-
-            pages_fetched += 1
-
-            # SerpAPI Walmart results are typically in 'organic_results'
-            items = data.get("organic_results") or data.get("items") or []
-            for item in items:
-                processed += 1
-                key, doc = _extract_key_and_doc(item, req.query)
-
-                # Upsert by key; track whether we inserted or updated
-                res = await walmart_col.update_one(
-                    {"key": key},
-                    {
-                        "$set": doc,
-                        "$setOnInsert": {"created_at": _now_iso()},
-                    },
-                    upsert=True,
-                )
-                if res.upserted_id:
-                    inserted += 1
-                    if len(sample_keys) < 8:
-                        sample_keys.append(key)
-                elif res.matched_count:
-                    updated += 1
-
-            # If SerpAPI says no more pages, break early
-            if not items:
+    # 1) search pages
+    for pg in range(1, req.pages + 1):
+        if total_processed >= req.max_products:
+            break
+        data = await walmart_search_page(req.query, page=pg, store_id=req.store_id)
+        items = data.get("organic_results") or []
+        for it in items:
+            if total_processed >= req.max_products:
                 break
+            pid = it.get("product_id") or it.get("product_id_full") or it.get("us_item_id") or it.get("item_id")
+            if not pid:
+                continue
+            doc = {
+                "product_id": str(pid),
+                "title": it.get("title"),
+                "price": _p(it.get("primary_offer", {}).get("price") or it.get("price")),
+                "link": it.get("link"),
+                "thumbnail": it.get("thumbnail"),
+                "rating": it.get("rating"),
+                "reviews": it.get("reviews"),
+                "brand": it.get("brand") or it.get("seller"),
+                "seller": it.get("seller"),
+                "updatedAt": now_utc(),
+            }
+            res = await db[WM_COLL].update_one(
+                {"product_id": str(pid)},
+                {"$setOnInsert": {"createdAt": now_utc()},
+                 "$set": doc},
+                upsert=True,
+            )
+            if res.upserted_id:
+                inserted += 1
+            else:
+                updated += res.modified_count
+            total_processed += 1
+            saved_ids.append(str(pid))
 
-            # polite delay between pages
-            if req.delay_ms > 0 and page < req.max_pages:
-                await asyncio.sleep(req.delay_ms / 1000.0)
+        if req.delay_ms:
+            await asyncio.sleep(req.delay_ms / 1000.0)
 
-    return WalmartScrapeResult(
-        query=req.query,
-        pages_fetched=pages_fetched,
-        inserted=inserted,
-        updated=updated,
-        total_processed=processed,
-        sample_keys=sample_keys,
-    )
+    # 2) optional UPC enrichment (walmart_product)
+    enriched = 0
+    checked = 0
+    if req.enrich_upc and req.max_detail_calls > 0 and saved_ids:
+        need_upc = await db[WM_COLL].find(
+            {"product_id": {"$in": saved_ids}, "$or": [{"upc": {"$exists": False}}, {"upc": None}, {"upc": ""}]},
+            {"_id": 1, "product_id": 1}
+        ).limit(req.max_detail_calls).to_list(req.max_detail_calls)
+
+        for it in need_upc:
+            if checked >= req.max_detail_calls:
+                break
+            pid = it["product_id"]
+            try:
+                detail = await walmart_product_detail(pid)
+                blk = extract_upc_block(detail)
+                if blk:
+                    blk["enriched_at"] = now_utc()
+                    await db[WM_COLL].update_one({"_id": it["_id"]}, {"$set": blk})
+                    enriched += 1
+            except Exception:
+                pass
+            finally:
+                checked += 1
+                await asyncio.sleep(0.4)
+
+    return {
+        "query": req.query,
+        "pages_fetched": req.pages,
+        "inserted": inserted,
+        "updated": updated,
+        "total_processed": total_processed,
+        "detail_checked": checked,
+        "upc_enriched": enriched,
+    }
 
 
 # main.py (additions)
@@ -432,3 +461,64 @@ async def walmart_enrich_upc(limit: int = 25, recrawl_hours: int = 168):
         updated += 1
         time.sleep(0.3)  # gentle
     return {"checked": len(items), "updated": updated}
+
+
+
+###HELPERS
+
+def now_utc():
+    return datetime.now(timezone.utc)
+
+def now_iso():
+    return now_utc().isoformat()
+
+def _p(v):
+    """Lenient price parser: '$19.99' | 19.99 | {'raw': '$19.99'}"""
+    if v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    if isinstance(v, dict):
+        for k in ("value", "raw", "price"):
+            if k in v:
+                return _p(v[k])
+    s = str(v).replace(",", "")
+    m = re.search(r"(\d+(?:\.\d{1,2})?)", s)
+    return float(m.group(1)) if m else None
+
+async def serp_get(url: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    if not SERPAPI_KEY:
+        raise HTTPException(500, "SERPAPI_KEY not set")
+    p = dict(params)
+    p["api_key"] = SERPAPI_KEY
+    async with httpx.AsyncClient(timeout=30) as c:
+        r = await c.get(url, params=p)
+        r.raise_for_status()
+        return r.json()
+
+async def walmart_search_page(query: str, page: int = 1, store_id: Optional[str] = None) -> Dict[str, Any]:
+    # https://serpapi.com/walmart-search-api
+    params = {"engine": "walmart", "query": query, "page": page, "hl": "en", "gl": "us"}
+    if store_id:
+        params["store_id"] = store_id
+    return await serp_get("https://serpapi.com/search.json", params)
+
+async def walmart_product_detail(product_id: str) -> Dict[str, Any]:
+    # https://serpapi.com/walmart-product-api
+    return await serp_get(
+        "https://serpapi.com/search.json",
+        {"engine": "walmart_product", "product_id": product_id, "hl": "en", "gl": "us"},
+    )
+
+def extract_upc_block(detail_payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Pull upc/gtin/category from walmart_product response."""
+    out = {}
+    prod = (detail_payload or {}).get("product") or {}
+    for k in ("upc", "gtin", "gtin13", "gtin14", "ean"):
+        if prod.get(k):
+            out[k] = str(prod[k])
+    if prod.get("category"):
+        out["category"] = prod["category"]
+    elif prod.get("categories"):
+        out["category"] = " / ".join([str(x) for x in prod["categories"] if x])
+    return out
