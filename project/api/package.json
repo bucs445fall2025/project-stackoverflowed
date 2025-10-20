@@ -15,7 +15,8 @@
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "mongodb": "^5.7.0",
-    "mongoose": "^8.19.1"
+    "mongoose": "^8.19.1",
+    "node-fetch": "^3.3.2"
   },
   "keywords": [],
   "author": "",
