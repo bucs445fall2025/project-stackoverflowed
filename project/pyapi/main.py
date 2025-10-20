@@ -434,33 +434,54 @@ class EnrichUPCRequest(BaseException):
 @app.post("/walmart/enrich-upc")
 async def walmart_enrich_upc(limit: int = 25, recrawl_hours: int = 168):
     """
-    For items missing 'upc', fetch their PDP and extract upc/gtin/category.
-    Does NOT use SerpAPI → free.
+    For items missing 'upc', call SerpAPI walmart_product by product_id
+    to extract upc/gtin/category. No page HTML scraping required.
     """
-    cutoff = datetime.utcnow() - timedelta(hours=recrawl_hours)
+    cutoff = now_utc() - timedelta(hours=recrawl_hours)
+
+    # ✅ match docs with no upc field OR upc == null/"" and avoid hammering recently enriched rows
     q = {
-        "upc": {"$in": [None, ""]},
-        "link": {"$exists": True, "$ne": None},
-        "$or": [{"enriched_at": {"$exists": False}}, {"enriched_at": {"$lt": cutoff}}],
+        "$or": [
+            {"upc": {"$exists": False}},
+            {"upc": None},
+            {"upc": "" }
+        ],
+        "$or": [
+            {"enriched_at": {"$exists": False}},
+            {"enriched_at": {"$lt": cutoff}},
+        ],
+        "product_id": {"$exists": True, "$ne": None}
     }
 
-    items = await db[WM_COLL].find(q, {"_id": 1, "link": 1, "title": 1}).limit(limit).to_list(limit)
+    items = await db[WM_COLL].find(
+        q, {"_id": 1, "product_id": 1, "title": 1}
+    ).limit(limit).to_list(limit)
+
+    checked = 0
     updated = 0
+
     for it in items:
-        url = it.get("link")
-        if not url:
-            continue
-        fields = await fetch_walmart_pdp_fields(url)
-        if not fields:
-            # still mark as attempted to avoid hammering
-            await db[WM_COLL].update_one({"_id": it["_id"]}, {"$set": {"enriched_at": datetime.utcnow()}})
-            continue
-        fields["enriched_at"] = datetime.utcnow()
-        fields["upc_source"] = "pdp"
-        await db[WM_COLL].update_one({"_id": it["_id"]}, {"$set": fields})
-        updated += 1
-        time.sleep(0.3)  # gentle
-    return {"checked": len(items), "updated": updated}
+        if checked >= limit:
+            break
+        pid = str(it["product_id"])
+        try:
+            detail = await walmart_product_detail(pid)  # uses SerpAPI walmart_product
+            blk = extract_upc_block(detail)  # pulls upc/gtin/category if present
+            changes = {"enriched_at": now_utc(), "upc_source": "walmart_product"}
+            if blk:
+                changes.update(blk)
+                updated += 1
+            # even if nothing found, stamp enriched_at so we don't retry immediately
+            await db[WM_COLL].update_one({"_id": it["_id"]}, {"$set": changes})
+        except Exception:
+            # still mark as checked to avoid hot-looping on failures
+            await db[WM_COLL].update_one({"_id": it["_id"]}, {"$set": {"enriched_at": now_utc()}})
+        finally:
+            checked += 1
+            await asyncio.sleep(0.4)  # be polite
+
+    return {"checked": checked, "updated": updated}
+
 
 
 
