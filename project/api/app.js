@@ -21,6 +21,8 @@ const walmartRead = require('./routes/walmartRead');
 app.use('/api/amazon', walmartRead);
 const dbDebug = require("./routes/dbDebug");
 app.use("/api", dbDebug);
+const usersDebug = require("./routes/usersDebug");
+app.use("/api", usersDebug);
 
 // Global error handler for routes
 app.use((err, req, res, next) => {
