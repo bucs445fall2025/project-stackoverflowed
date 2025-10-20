@@ -73,20 +73,27 @@ async def serp_get(url: str, params: Dict[str, Any]) -> Dict[str, Any]:
 
 # MongoDB expression helpers (for $project/$addFields)
 def to_num(expr: Any) -> Dict[str, Any]:
-    """Mongo expression to coerce a value (string like '$12.99') into number."""
     return {
-        "$toDouble": {
-            "$replaceAll": {
-                "input": {
+        "$cond": [
+            {"$isNumber": expr},
+            {"$toDouble": expr},
+            {
+                "$toDouble": {
                     "$replaceAll": {
-                        "input": {"$ifNull": [expr, "0"]},
-                        "find": ",", "replacement": ""
+                        "input": {
+                            "$replaceAll": {
+                                "input": {"$toString": {"$ifNull": [expr, "0"]}},
+                                "find": ",", "replacement": ""
+                            }
+                        },
+                        "find": "$", "replacement": ""
                     }
-                },
-                "find": "$", "replacement": ""
+                }
             }
-        }
+        ]
     }
+}
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Indexes
@@ -145,57 +152,49 @@ async def walmart_product_detail(product_id: str) -> Dict[str, Any]:
 
 UPC12_RE = re.compile(r"\b(\d{12})\b")
 
-def _maybe_upc_from_text(txt: str) -> Optional[str]:
+def _maybe_upc(txt):
     if not txt: return None
     m = UPC12_RE.search(str(txt))
     return m.group(1) if m else None
 
 def extract_upc_block(detail_payload: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Pull upc/gtin/category from walmart_product response.
-    Also scan feature_item/specs for a UPC line.
-    """
     out: Dict[str, Any] = {}
     prod = (detail_payload or {}).get("product") or {}
 
-    # direct id fields
-    for k in ("upc", "gtin", "gtin13", "gtin14", "ean"):
-        if prod.get(k):
-            out[k] = str(prod[k])
+    # direct fields
+    for k in ("upc","gtin","gtin13","gtin14","ean"):
+        if prod.get(k): out[k] = str(prod[k])
 
-    # feature_item can be a list of {name,value} or strings
+    # feature_item: [{name,value}] or list of strings
     feat = prod.get("feature_item")
     if feat:
         for item in (feat if isinstance(feat, list) else [feat]):
             if isinstance(item, dict):
                 name = str(item.get("name") or "").lower()
-                val  = str(item.get("value") or "")
+                val  = item.get("value")
                 if "upc" in name:
-                    cand = _maybe_upc_from_text(val) or val.strip()
-                    if cand: out.setdefault("upc", cand)
+                    out.setdefault("upc", (_maybe_upc(val) or str(val).strip()))
                 else:
-                    cand = _maybe_upc_from_text(val)
+                    cand = _maybe_upc(val)
                     if cand: out.setdefault("upc", cand)
             else:
-                cand = _maybe_upc_from_text(str(item))
+                cand = _maybe_upc(item)
                 if cand: out.setdefault("upc", cand)
 
-    # sometimes “specifications” / “attributes”
-    for spec_key in ("specifications", "attributes"):
+    # other specs buckets sometimes used
+    for spec_key in ("specifications","attributes"):
         specs = prod.get(spec_key)
         if isinstance(specs, dict):
-            for k, v in specs.items():
+            for k,v in specs.items():
                 if "upc" in str(k).lower():
-                    cand = _maybe_upc_from_text(v)
+                    cand = _maybe_upc(v)
                     if cand: out.setdefault("upc", cand)
 
     # category
-    if prod.get("category"):
-        out["category"] = prod["category"]
+    if prod.get("category"): out["category"] = prod["category"]
     elif prod.get("categories"):
         cats = [str(x) for x in prod["categories"] if x]
         if cats: out["category"] = " / ".join(cats)
-
     return out
 
 
