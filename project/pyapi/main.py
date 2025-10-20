@@ -73,27 +73,20 @@ async def serp_get(url: str, params: Dict[str, Any]) -> Dict[str, Any]:
 
 # MongoDB expression helpers (for $project/$addFields)
 def to_num(expr: Any) -> Dict[str, Any]:
+    """Mongo expression to coerce a value (string like '$12.99') into number."""
     return {
-        "$cond": [
-            {"$isNumber": expr},
-            {"$toDouble": expr},
-            {
-                "$toDouble": {
+        "$toDouble": {
+            "$replaceAll": {
+                "input": {
                     "$replaceAll": {
-                        "input": {
-                            "$replaceAll": {
-                                "input": {"$toString": {"$ifNull": [expr, "0"]}},
-                                "find": ",", "replacement": ""
-                            }
-                        },
-                        "find": "$", "replacement": ""
+                        "input": {"$ifNull": [expr, "0"]},
+                        "find": ",", "replacement": ""
                     }
-                }
+                },
+                "find": "$", "replacement": ""
             }
-        ]
+        }
     }
-}
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Indexes
