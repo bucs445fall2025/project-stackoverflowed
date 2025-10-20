@@ -1,27 +1,38 @@
+// routes/walmartRoutes.js
 const express = require("express");
-// Polyfill fetch for Node < 18
-const { fetch } = require("undici");   // fetch present here
+const { fetch } = require("undici");
 
 const router = express.Router();
-const PYAPI_URL = process.env.PYAPI_URL || "http://localhost:8001";
 
+// POST /api/amazon/walmart/scrape -> proxies to FastAPI /walmart/scrape
 router.post("/walmart/scrape", async (req, res) => {
   try {
-    const { query, max_pages = 1, store_id = null, delay_ms = 600 } = req.body || {};
-    if (!query) return res.status(400).json({ error: "query is required" });
-
-    const r = await fetch(`${PYAPI_URL}/walmart/scrape`, {
+    const r = await fetch(`${process.env.PYAPI_URL}/walmart/scrape`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query, max_pages, store_id, delay_ms }),
+      body: JSON.stringify(req.body),
     });
 
-    const text = await r.text();
-    let payload; try { payload = JSON.parse(text); } catch { payload = { error: text }; }
-    return res.status(r.status).json(payload);
+    // Parse JSON
+    const data = await r.json();
+    res.status(r.status).json(data);
   } catch (err) {
-    console.error("pyapi scrape error:", err);
-    return res.status(502).json({ error: "pyapi unavailable" });
+    console.error("Proxy error (walmart/scrape):", err);
+    res.status(500).json({ error: "Proxy to pyapi failed" });
+  }
+});
+
+// GET /api/amazon/walmart/items -> proxies to FastAPI /walmart/stats
+router.get("/walmart/items", async (req, res) => {
+  try {
+    const r = await fetch(`${process.env.PYAPI_URL}/walmart/stats`);
+    const data = await r.json();
+
+    // Shape into items array if needed
+    res.json({ items: data.items || data });
+  } catch (err) {
+    console.error("Proxy error (walmart/items):", err);
+    res.status(500).json({ error: "Failed to fetch Walmart items" });
   }
 });
 

@@ -24,6 +24,7 @@ app.use("/api", dbDebug);
 const usersDebug = require("./routes/usersDebug");
 app.use("/api", usersDebug);
 
+
 // Global error handler for routes
 app.use((err, req, res, next) => {
   console.error(err.stack);
