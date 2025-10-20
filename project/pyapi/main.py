@@ -7,6 +7,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from motor.motor_asyncio import AsyncIOMotorClient
+from typing import List, Dict, Any, Optional
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone, timedelta
 import httpx
@@ -536,3 +537,47 @@ async def normalize_walmart(limit: int = 500):
             await coll.update_one({"_id": d["_id"]}, {"$set": update})
             touched += 1
     return {"normalized": touched}
+
+
+
+
+
+#TESTING ROUTE
+@app.get("/debug/amazon-search")
+async def debug_amazon_search(
+    q: str,
+    n: int = 5,
+    domain: str = "amazon.com"
+):
+    """
+    Minimal Amazon search via SerpAPI.
+    Returns top N simple results: title, price_num, price_raw, link, asin, badge.
+    """
+    if not SERPAPI_KEY:
+        raise HTTPException(500, "SERPAPI_KEY not set")
+
+    data = await serp_get(
+        "https://serpapi.com/search.json",
+        {
+            "engine": "amazon",
+            "amazon_domain": domain,
+            "q": q,
+            "gl": "us",
+            "hl": "en",
+        },
+    )
+
+    out: List[Dict[str, Any]] = []
+    for it in (data.get("organic_results") or [])[: max(0, n)]:
+        out.append({
+            "title": it.get("title"),
+            "price_num": parse_price(it.get("price")),
+            "price_raw": it.get("price"),
+            "link": it.get("link"),
+            "asin": it.get("asin"),
+            "badge": it.get("badge"),
+            "rating": it.get("rating"),
+            "reviews": it.get("reviews"),
+        })
+
+    return {"q": q, "count": len(out), "results": out}
