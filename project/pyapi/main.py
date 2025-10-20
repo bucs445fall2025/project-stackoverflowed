@@ -276,18 +276,34 @@ async def index_amazon_by_upc(req: IndexAmazonRequest):
     return {"distinct_upcs": len(upcs), "cached": cached_count, "fetched_now": fetched, "failures": failures}
 
 
+def to_num(expr):
+    return {
+        "$toDouble": {
+            "$replaceAll": {
+                "input": {
+                    "$replaceAll": {
+                        "input": {"$ifNull": [expr, "0"]},
+                        "find": ",", "replacement": ""
+                    }
+                },
+                "find": "$", "replacement": ""
+            }
+        }
+    }
+
 @app.get("/deals/by-category")
 async def deals_by_category(
-    category: str = Query(...),
+    category: str | None = Query(None),
     min_abs: float = 5.0,
     min_pct: float = 0.20,
     limit: int = 50
 ):
-    """
-    Join walmart_items with amazon_offers on UPC and return items where Walmart is cheaper by thresholds.
-    """
+    match = {"upc": {"$exists": True, "$ne": None}}
+    if category:
+        match["category"] = category
+
     pipeline = [
-        {"$match": {"category": category, "upc": {"$exists": True, "$ne": None}}},
+        {"$match": match},
         {"$lookup": {
             "from": AMZ_COLL,
             "let": {"u": "$upc"},
@@ -300,23 +316,8 @@ async def deals_by_category(
         }},
         {"$unwind": "$amz"},
         {"$addFields": {
-            "wm_price_num": {"$toDouble": {"$ifNull": ["$price", 0]}},
-            "amz_price_num": {
-                "$toDouble": {
-                    "$ifNull": [
-                        {"$arrayElemAt": [
-                            {"$filter": {
-                                "input": [
-                                    {"$toDouble": {"$ifNull": ["$amz.price", None]}},
-                                    {"$toDouble": {"$ifNull": ["$amz.price.value", None]}},
-                                ],
-                                "as": "p", "cond": {"$gt": ["$$p", 0]}
-                            }}, 0
-                        ]},
-                        0
-                    ]
-                }
-            }
+            "wm_price_num": to_num("$price"),
+            "amz_price_num": to_num({"$ifNull": ["$amz.price.value", {"$ifNull": ["$amz.price", "0"]}]})
         }},
         {"$addFields": {
             "diff": {"$subtract": ["$amz_price_num", "$wm_price_num"]},
@@ -329,30 +330,17 @@ async def deals_by_category(
         {"$match": {"diff": {"$gte": min_abs}, "pct": {"$gte": min_pct}}},
         {"$project": {
             "_id": 0,
-            "wm": {
-                "title": "$title",
-                "price": "$wm_price_num",
-                "brand": "$brand",
-                "link": "$link",
-                "thumbnail": "$thumbnail",
-                "upc": "$upc"
-            },
-            "amz": {
-                "asin": "$amz.amz.asin",
-                "title": "$amz.amz.title",
-                "price": "$amz_price_num",
-                "link": "$amz.amz.link",
-                "brand": "$amz.amz.brand",
-                "checked_at": "$amz.checked_at"
-            },
-            "savings_abs": "$diff",
-            "savings_pct": {"$multiply": ["$pct", 100]}
+            "wm": {"title": "$title", "price": "$wm_price_num", "brand": "$brand", "link": "$link", "thumbnail": "$thumbnail", "upc": "$upc", "category": "$category"},
+            "amz": {"asin": "$amz.amz.asin", "title": "$amz.amz.title", "price": "$amz_price_num", "link": "$amz.amz.link", "brand": "$amz.amz.brand", "checked_at": "$amz.checked_at"},
+            "savings_abs": {"$round": ["$diff", 2]},
+            "savings_pct": {"$round": [{"$multiply": ["$pct", 100]}, 1]}
         }},
         {"$sort": {"savings_abs": -1, "savings_pct": -1}},
         {"$limit": limit}
     ]
     docs = await db[WM_COLL].aggregate(pipeline).to_list(limit)
     return {"count": len(docs), "deals": docs}
+
 
 
 #DEBUGGING ROUTES
