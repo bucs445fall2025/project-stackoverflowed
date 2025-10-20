@@ -353,3 +353,21 @@ async def deals_by_category(
     ]
     docs = await db[WM_COLL].aggregate(pipeline).to_list(limit)
     return {"count": len(docs), "deals": docs}
+
+
+#DEBUGGING ROUTES
+@app.get("/walmart/stats")
+async def wm_stats():
+    wm = db[os.getenv("MONGO_WALMART_COLLECTION","walmart_items")]
+    total = await wm.count_documents({})
+    with_upc = await wm.count_documents({"upc": {"$exists": True, "$ne": None}})
+    cats = await wm.distinct("category")
+    return {"walmart_total": total, "walmart_with_upc": with_upc, "categories": cats}
+
+@app.get("/amazon/cache/stats")
+async def amz_stats():
+    amz = db[os.getenv("MONGO_AMAZON_COLLECTION","amazon_offers")]
+    total = await amz.count_documents({})
+    upc_keys = await amz.count_documents({"key_type":"upc"})
+    sample = await amz.find_one({}, {"_id":0, "key_type":1, "key_val":1, "price":1, "checked_at":1})
+    return {"amazon_offers_total": total, "amazon_upc_keys": upc_keys, "sample": sample}
