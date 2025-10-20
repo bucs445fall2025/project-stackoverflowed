@@ -20,6 +20,8 @@ import re
 
 app = FastAPI(title="Walmart vs Amazon Deals API")
 
+
+
 SERPAPI_KEY = os.getenv("SERPAPI_KEY")
 MONGO_URL   = os.getenv("MONGO_URL")
 MONGO_DB    = os.getenv("MONGO_DB", "MongoDB")
