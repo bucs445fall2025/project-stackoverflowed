@@ -14,6 +14,7 @@ import asyncio
 import os
 import re
 import difflib
+import random
 
 app = FastAPI(title="Walmart vs Amazon Deals (Title Match)")
 
@@ -65,22 +66,28 @@ def parse_price(v) -> Optional[float]:
     return float(m.group(1)) if m else None
 
 async def serp_get(url: str, q: dict):
-    q["api_key"] = os.environ["SERPAPI_KEY"]
+    if not SERPAPI_KEY:
+        raise HTTPException(status_code=500, detail="SERPAPI_KEY not set")
+    q["api_key"] = SERPAPI_KEY
 
-    timeout = httpx.Timeout(30.0, connect=15.0)  # 30s total, 15s to connect
+    timeout = httpx.Timeout(30.0, connect=15.0)
     async with httpx.AsyncClient(timeout=timeout) as c:
         for attempt in range(3):
             try:
                 r = await c.get(url, params=q)
-                r.raise_for_status()
+                if r.status_code >= 400:
+                    # show SerpAPI’s error content instead of a generic 500
+                    try:
+                        err = r.json()
+                    except Exception:
+                        err = {"text": r.text}
+                    raise HTTPException(status_code=r.status_code, detail=err)
                 return r.json()
             except httpx.ReadTimeout:
                 if attempt < 2:
-                    await asyncio.sleep(2 ** attempt + random.random())  # exponential backoff
+                    await asyncio.sleep((2 ** attempt) + random.random())
                     continue
                 raise HTTPException(status_code=504, detail="SerpAPI request timed out")
-            except httpx.HTTPStatusError as e:
-                raise HTTPException(status_code=e.response.status_code, detail=str(e))
 
 
 # Type-safe Mongo “to number”
