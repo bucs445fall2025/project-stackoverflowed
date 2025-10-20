@@ -4,6 +4,7 @@ const express = require('express'); // Import express for back-end framework
 const cors = require('cors'); // Import CORS middleware to allow front-end to request to this server  
 const connectDB = require('./config/db');  // Import connectDB()
 
+
 const app = express(); // Create a new express app instance
 app.use(cors({ origin: '*' })); // Add CORS middleware to the app instance. '*' = any domain can send reqs here
 app.use(express.json()); // Adds middleware to automatically parse incoming JSON in request bodies 
@@ -13,6 +14,11 @@ const amazonRoutes = require('./routes/amazonRoutes'); // Importing amazon route
 app.use('/api/amazon', amazonRoutes); // Mounts them under /api/amazon so any reqs to /api/amazon/... will be handled by that router
 const userRoutes = require('./routes/userRoutes'); // Importing user routes
 app.use('/api/users', userRoutes); // Mounts them under /api/users
+//for walmart stuff
+const walmartRoutes = require('./routes/walmartRoutes');
+app.use('/api/amazon', walmartRoutes); 
+const walmartRead = require('./routes/walmartRead');
+app.use('/api/amazon', walmartRead);
 
 // Global error handler for routes
 app.use((err, req, res, next) => {
@@ -32,4 +38,6 @@ connectDB().then(() => {
   app.listen(port, '0.0.0.0', () => { 
   console.log(`Backend (sandbox) running on port ${port}`);
   });
+
+  
 });

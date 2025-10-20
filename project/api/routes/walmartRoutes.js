@@ -1,0 +1,35 @@
+// routes/walmartRoutes.js
+const express = require("express");
+const fetch = require("node-fetch");
+
+const router = express.Router();
+const PYAPI_URL = process.env.PYAPI_URL || "http://localhost:8001";
+
+// POST /api/amazon/walmart/scrape
+router.post("/walmart/scrape", async (req, res) => {
+  try {
+    const { query, max_pages = 1, store_id = null, delay_ms } = req.body || {};
+    if (!query) return res.status(400).json({ error: "query is required" });
+
+    const r = await fetch(`${PYAPI_URL}/walmart/scrape`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query,
+        max_pages,
+        store_id,
+        delay_ms: delay_ms ?? Number(process.env.PY_TO_SERP_DELAY_MS || 500),
+      }),
+    });
+
+    const text = await r.text();
+    let payload;
+    try { payload = JSON.parse(text); } catch { payload = { error: text }; }
+    return res.status(r.status).json(payload);
+  } catch (err) {
+    console.error("pyapi scrape error:", err);
+    return res.status(502).json({ error: "pyapi unavailable" });
+  }
+});
+
+module.exports = router;
