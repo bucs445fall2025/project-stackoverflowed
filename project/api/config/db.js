@@ -12,15 +12,14 @@ const MONGO_URL = process.env.MONGO_URL || 'mongodb://localhost:27017/fbalgo';
 */
 const connectDB = async () => {
   try {
-    if (!MONGO_URL) throw new Error("MONGO_URL not set");
-    await mongoose.connect(MONGO_URL, {
-      dbName: "MongoDB",            // select the DB explicitly
-      // remove deprecated options; v6+ ignores them anyway
+    await mongoose.connect(MONGO_URL, { // 'await' Pauses execution until Promise resolves
+      useNewUrlParser: true, // Tells Mongoose to use the new MongoDB connection string parser
+      useUnifiedTopology: true, // Tells Mongoose to use the new topology engine, for beter connection handling and monitoring
     });
-    console.log("Connected to MongoDB");
+    console.log('Connected to MongoDB');
   } catch (err) {
-    console.error("MongoDB connection error:", err);
-    process.exit(1);
+    console.error('MongoDB connection error:', err);
+    process.exit(1); // Stop Node.js process cause it cant work without a DB
   }
 };
 
