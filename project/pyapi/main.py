@@ -253,9 +253,16 @@ def title_score(wm_title: str, amz_title: str, brand: Optional[str]=None) -> flo
 
 async def serp_amazon_by_title(title: str, brand: Optional[str]=None) -> Optional[Dict[str, Any]]:
     q = f"{brand} {title}" if brand else title
-    data = await serp_get("https://serpapi.com/search.json", {
-        "engine":"amazon","amazon_domain":"amazon.com","q":q,"gl":"us","hl":"en"
-    })
+    data = await serp_get(
+    "https://serpapi.com/search.json",
+    {
+        "engine": "amazon",
+        "amazon_domain": "amazon.com",
+        "k": q,             # ← use `k`, not `q`
+        "gl": "us",
+        "hl": "en",
+    },
+)
     best, best_s, best_p = None, -1.0, None
     for it in data.get("organic_results", []):
         p = parse_price(it.get("price"))
@@ -561,7 +568,7 @@ async def debug_amazon_search(
         {
             "engine": "amazon",
             "amazon_domain": domain,
-            "q": q,
+            "k": q,              # ← use `k`, not `q`
             "gl": "us",
             "hl": "en",
         },
