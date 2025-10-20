@@ -160,20 +160,24 @@ export default function Dashboard() {
         min_score: String(dealMinScore),
         limit: String(dealLimit),
       });
-      if (dealCategory.trim()) params.set("category", dealCategory.trim());
-
-      const r = await fetch(`${API_BASE}/api/amazon/deals/by-title?${params.toString()}`)
+      if (dealCategory.trim()) {
+        params.set("category", dealCategory.trim()); // if your docs have category
+        params.set("kw", dealCategory.trim());       // fallback: title keyword
+      }
+  
+      const r = await fetch(`${PYAPI_BASE}/deals/by-title?${params.toString()}`);
       const data = await r.json();
       if (!r.ok) throw new Error(data?.detail || data?.error || "Failed to fetch deals");
       const arr = Array.isArray(data.deals) ? data.deals : [];
       setDeals(arr);
-      if (!arr.length) setDealsMsg("No deals yet. Build Amazon Cache, then Find Deals.");
+      if (!arr.length) setDealsMsg("No deals yet. Try a broader keyword, or build more Amazon cache.");
     } catch (e) {
       setDealsMsg(`Error: ${e.message}`);
     } finally {
       setDealsLoading(false);
     }
   };
+  
 
   // Optional autoload
   useEffect(() => {

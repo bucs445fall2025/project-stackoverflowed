@@ -120,6 +120,55 @@ def to_num(expr: Any) -> Dict[str, Any]:
         }
     }
 
+SIZE_RE = re.compile(
+    r"(?:(\d+(?:\.\d+)?)\s*(lb|lbs|pound|pounds|oz|ounce|ounces|kg|g|gram|grams|ml|l|liter|liters))"
+    r"|(?:pack\s*of\s*(\d+)|(\d+)\s*ct|\b(\d+)-?pack\b)",
+    re.I,
+)
+
+def _to_grams(val: float, unit: str) -> Optional[float]:
+    u = unit.lower()
+    if u in {"lb", "lbs", "pound", "pounds"}: return val * 453.59237
+    if u in {"oz", "ounce", "ounces"}:        return val * 28.349523125
+    if u in {"kg"}:                            return val * 1000.0
+    if u in {"g", "gram", "grams"}:            return val
+    # liquid units are tricky; treat ml like g, L as 1000g approx (density ~1)
+    if u in {"ml"}:                             return val
+    if u in {"l", "liter", "liters"}:          return val * 1000.0
+    return None
+
+def extract_size_and_count(title: str) -> Dict[str, Optional[float]]:
+    """
+    Heuristic: extract primary size in grams (approx) and pack count, e.g.
+    'Optimum Nutrition Whey Protein 5 lb (2 pack)' -> grams=2267.96, count=2
+    """
+    grams = None
+    count = 1
+    if not title:
+        return {"grams": None, "count": 1}
+
+    for m in SIZE_RE.finditer(title):
+        qty, unit, pack_of, ct_alt, pack_alt = m.groups()
+        if qty and unit:
+            g = _to_grams(float(qty), unit)
+            if g:
+                # keep the largest size we find (ignores tiny “sample 1 oz” if 5 lb also present)
+                grams = max(grams or 0, g)
+        if pack_of and pack_of.isdigit():
+            count = max(count, int(pack_of))
+        if ct_alt and ct_alt.isdigit():
+            count = max(count, int(ct_alt))
+        if pack_alt and pack_alt.isdigit():
+            count = max(count, int(pack_alt))
+
+    return {"grams": grams, "count": count}
+
+def unit_price(price: Optional[float], grams: Optional[float], count: int) -> Optional[float]:
+    if price is None or grams is None or grams <= 0:
+        return None
+    total_grams = grams * max(1, count)
+    return price / total_grams if total_grams > 0 else None
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Indexes
 # ──────────────────────────────────────────────────────────────────────────────
@@ -257,10 +306,22 @@ def norm(s: str) -> str:
 
 def title_score(wm_title: str, amz_title: str, brand: Optional[str]=None) -> float:
     a = norm(wm_title); b = norm(amz_title)
-    base = difflib.SequenceMatcher(None, a, b).ratio()  # 0..1
+    base = difflib.SequenceMatcher(None, a, b).ratio()
     if brand and brand.lower() in (amz_title or "").lower():
         base += 0.05
-    return min(base, 1.0)
+
+    # size affinity bonus (if sizes within ~±25%)
+    wm_sz = extract_size_and_count(wm_title)
+    amz_sz = extract_size_and_count(amz_title)
+    wg, wc = wm_sz["grams"], wm_sz["count"]
+    ag, ac = amz_sz["grams"], amz_sz["count"]
+    if wg and ag:
+        ratio = min(wg*wc, ag*ac) / max(wg*wc, ag*ac)
+        if ratio >= 0.75:
+            base += 0.05  # modest bump
+        else:
+            base -= 0.05  # small penalty for very different sizes
+    return max(0.0, min(base, 1.0))
 
 async def serp_amazon_by_title(title: str, brand: Optional[str]=None) -> Optional[Dict[str, Any]]:
     q = f"{brand} {title}" if brand else title
@@ -291,11 +352,11 @@ async def serp_amazon_by_title(title: str, brand: Optional[str]=None) -> Optiona
 
 class IndexAmazonByTitleReq(BaseModel):
     category: Optional[str] = None
-    limit_items: int = 50
-    recache_hours: int = 72
-    max_serp_calls: int = 25
+    kw: Optional[str] = None         
+    limit_items: int = 400           
+    recache_hours: int = 48
+    max_serp_calls: int = 200        
     min_score: float = 0.62
-
 @app.post("/amazon/index-by-title")
 async def index_amazon_by_title(req: IndexAmazonByTitleReq):
     """
@@ -314,14 +375,15 @@ async def index_amazon_by_title(req: IndexAmazonByTitleReq):
     }
     if req.category:
         match["category"] = req.category
+    if req.kw:
+        match["title"] = {"$regex": req.kw, "$options": "i"}
 
     cutoff = datetime.utcnow() - timedelta(hours=req.recache_hours)
 
     # Candidate Walmart items
-    items: List[Dict[str, Any]] = await db[WM_COLL].find(
-        match,
-        {"_id": 1, "product_id": 1, "title": 1, "brand": 1, "price": 1},
-    ).limit(req.limit_items).to_list(req.limit_items)
+    items = await db[WM_COLL].find(
+        match, {"_id":1,"product_id":1,"title":1,"brand":1,"price":1}
+    ).sort([("updatedAt",-1)]).limit(req.limit_items).to_list(req.limit_items)
 
     # Filter to those not recently cached
     to_fetch: List[Dict[str, Any]] = []
@@ -418,92 +480,113 @@ async def index_amazon_by_title(req: IndexAmazonByTitleReq):
 # ──────────────────────────────────────────────────────────────────────────────
 @app.get("/deals/by-title")
 async def deals_by_title(
-    category: Optional[str] = Query(None),
-    min_abs: float = Query(5.0, description="Minimum absolute savings (Amazon - Walmart)"),
-    min_pct: float = Query(0.20, description="Minimum percentage savings (Walmart at least this much cheaper)"),
-    min_score: float = Query(0.62, description="Minimum title match score 0..1"),
-    limit: int = Query(50, ge=1, le=200),
+    category: Optional[str] = Query(None, description="Exact category match if present in Walmart docs"),
+    kw: Optional[str] = Query(None, description="Case-insensitive keyword in Walmart title (fallback if category is sparse)"),
+    min_abs: float = Query(5.0),
+    min_pct: float = Query(0.20),
+    min_score: float = Query(0.62),
+    limit: int = Query(200, ge=1, le=2000),
+    size_ratio_min: float = Query(0.70, description="Min smaller/larger total-size ratio to accept as the same item"),
 ):
-    match: Dict[str, Any] = {
-    "title": {"$exists": True, "$ne": None},
-    "product_id": {"$exists": True, "$ne": None},
-}
+    # Pull candidate Walmart items (Python for size parsing; we need titles anyway)
+    q: Dict[str, Any] = {"title": {"$exists": True, "$ne": None}}
     if category:
-        match["category"] = category
+        q["category"] = category
+    if kw:
+        q["title"] = {"$regex": kw, "$options": "i"}
 
-    pipeline = [
-    {"$match": match},
-    {"$lookup": {
-        "from": AMZ_COLL,
-        "let": {"pid": "$product_id"},
-        "pipeline": [
-            {"$match": {"$expr": {"$and": [
-                {"$eq": ["$key_type", "wm_pid"]},
-                {"$eq": ["$key_val", "$$pid"]}
-            ]}}},
-            {"$sort": {"checked_at": -1}},
-            {"$limit": 1}
-        ],
-        "as": "amz"
-    }},
-    {"$unwind": "$amz"},
-    {"$match": {"amz.miss": {"$ne": True}}},
-    {"$match": {"amz.amz.match_score": {"$gte": min_score}}},
+    # fetch more rows to allow later filtering
+    wm_rows = await db[WM_COLL].find(q, {"_id":0}).sort([("updatedAt",-1)]).limit(limit*5).to_list(length=limit*5)
 
-    # numeric coercion (Mongo 4.2 compatible)
-    {"$addFields": {
-        "wm_price_num": to_num("$price"),
-        "amz_price_num": to_num({"$ifNull": ["$amz.price", "$amz.amz.price"]})
-    }},
-    {"$match": {
-    "wm_price_num": {"$gt": 0},
-    "amz_price_num": {"$gt": 0}
-    }},
-    # compute savings
-    {"$addFields": {
-        "diff": {"$subtract": ["$amz_price_num", "$wm_price_num"]},
-        "pct": {
-            "$cond": [
-                {"$gt": ["$amz_price_num", 0]},
-                {"$divide": [{"$subtract": ["$amz_price_num", "$wm_price_num"]}, "$amz_price_num"]},
-                0
-            ]
-        }
-    }},
+    # Join to the most recent Amazon cache per product_id
+    deals: List[Dict[str, Any]] = []
+    for wm in wm_rows:
+        wm_price = parse_price(wm.get("price"))
+        if not wm_price or wm_price <= 0:
+            continue
+        pid = str(wm.get("product_id") or "")
+        if not pid:
+            continue
 
-    # thresholds
-    {"$match": {"diff": {"$gte": min_abs}, "pct": {"$gte": min_pct}}},
+        amz_cache = await db[AMZ_COLL].find_one(
+            {"key_type":"wm_pid","key_val":pid,"miss":{"$ne":True}},
+            sort=[("checked_at",-1)]
+        )
+        if not amz_cache:
+            continue
+        amz = (amz_cache.get("amz") or {})
+        amz_price = parse_price(amz_cache.get("price") or amz.get("price"))
+        score = float(amz.get("match_score") or 0.0)
+        if score < min_score:
+            continue
+        if not amz_price or amz_price <= 0:
+            continue
 
-    # projection
-    {"$project": {
-        "_id": 0,
-        "wm": {
-            "title": "$title",
-            "price": {"$round": ["$wm_price_num", 2]},
-            "brand": "$brand",
-            "link": "$link",
-            "thumbnail": "$thumbnail",
-            "category": "$category",
-            "product_id": "$product_id",
-        },
-        "amz": {
-            "asin": "$amz.amz.asin",
-            "title": "$amz.amz.title",
-            "price": {"$round": ["$amz_price_num", 2]},
-            "link": "$amz.amz.link",
-            "brand": "$amz.amz.brand",
-            "match_score": "$amz.amz.match_score",
-            "checked_at": "$amz.checked_at",
-        },
-        "savings_abs": {"$round": ["$diff", 2]},
-        "savings_pct": {"$round": [{"$multiply": ["$pct", 100]}, 1]}
-    }},
-    {"$sort": {"savings_abs": -1, "savings_pct": -1}},
-    {"$limit": limit}
-]
+        # size-aware comparison
+        wm_sz = extract_size_and_count(wm.get("title") or "")
+        amz_sz = extract_size_and_count(amz.get("title") or "")
+        wg, wc = wm_sz["grams"], wm_sz["count"]
+        ag, ac = amz_sz["grams"], amz_sz["count"]
 
-    docs = await db[WM_COLL].aggregate(pipeline).to_list(limit)
-    return {"count": len(docs), "deals": docs}
+        size_ok = True
+        use_unit = False
+        if wg and ag:
+            wm_total = wg * max(1, wc)
+            amz_total = ag * max(1, ac)
+            ratio = min(wm_total, amz_total) / max(wm_total, amz_total)
+            size_ok = ratio >= size_ratio_min
+            use_unit = True
+
+        if not size_ok:
+            continue
+
+        if use_unit:
+            wm_unit = unit_price(wm_price, wg, wc)
+            amz_unit = unit_price(amz_price, ag, ac)
+            if wm_unit is None or amz_unit is None or amz_unit <= 0:
+                continue
+            diff = amz_unit - wm_unit
+            pct  = diff / amz_unit
+        else:
+            # fallback to absolute product price when sizes not parseable
+            diff = amz_price - wm_price
+            pct  = diff / amz_price
+
+        if diff >= min_abs and pct >= min_pct:
+            deals.append({
+                "wm": {
+                    "title": wm.get("title"),
+                    "price": round(wm_price, 2),
+                    "brand": wm.get("brand"),
+                    "link": wm.get("link"),
+                    "thumbnail": wm.get("thumbnail"),
+                    "category": wm.get("category"),
+                    "product_id": wm.get("product_id"),
+                    "size_grams": wg,
+                    "count": wc,
+                },
+                "amz": {
+                    "asin": amz.get("asin"),
+                    "title": amz.get("title"),
+                    "price": round(amz_price, 2),
+                    "link": amz.get("link"),
+                    "brand": amz.get("brand"),
+                    "match_score": score,
+                    "checked_at": amz_cache.get("checked_at"),
+                    "size_grams": ag,
+                    "count": ac,
+                },
+                "savings_abs": round(diff if not use_unit else diff * (ag or 1) * (ac or 1), 2) if use_unit else round(diff, 2),
+                "savings_pct": round(pct*100, 1),
+                "basis": "unit" if use_unit else "product"
+            })
+
+        if len(deals) >= limit:
+            break
+
+    # Sort best savings first
+    deals.sort(key=lambda d: (d["savings_abs"], d["savings_pct"]), reverse=True)
+    return {"count": len(deals), "deals": deals[:limit]}
 
 
 @app.get("/deals/by-category")
