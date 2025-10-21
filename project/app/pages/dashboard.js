@@ -159,50 +159,74 @@ export default function Dashboard() {
   // }, []);
 
   // Build Amazon cache by title/brand
-  const buildAmazonCacheByUPC = async () => {
+  const buildAmazonCache = async () => {
     setDealsMsg("");
     setDealsLoading(true);
     try {
-      const r = await fetch(`${API_BASE}/api/amazon/index-upc?t=${Date.now()}`, {
+      // 1) UPC-first
+      const r1 = await fetch(`${API_BASE}/api/amazon/index-upc`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Cache-Control": "no-cache" },
         cache: "no-store",
-        body: JSON.stringify({ limit: 200 })  // optional body
+        body: JSON.stringify({ limit: 300, recache_hours: 24 }),
       });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data?.detail || data?.error || "Index UPC failed");
-      setDealsMsg(`Indexed UPCs: fetched ${data.fetched}, misses ${data.misses}`);
+      const j1 = await r1.json();
+      if (!r1.ok) throw new Error(j1?.detail || j1?.error || "UPC index failed");
+  
+      // 2) strict title fallback (optional; comment out if you want UPC-only)
+      const r2 = await fetch(`${API_BASE}/api/amazon/index-by-title?t=${Date.now()}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-cache" },
+        cache: "no-store",
+        body: JSON.stringify({ limit_items: 120, max_serp_calls: 60, min_score: 0.80, recache_hours: 24 }),
+      });
+      const j2 = await r2.json();
+  
+      setDealsMsg(`Amazon cache → UPC fetched: ${j1.fetched ?? 0} (misses ${j1.misses ?? 0}); Title fetched: ${j2.fetched_now ?? 0} (misses ${j2.misses ?? 0})`);
     } catch (e) {
       setDealsMsg(`Error: ${e.message}`);
     } finally {
       setDealsLoading(false);
     }
   };
+  
 
   // Fetch deals (title/brand match)
-  const fetchDealsByUPC = async () => {
+  const fetchDeals = async () => {
     setDealsLoading(true);
     setDealsMsg("");
     try {
-      const params = new URLSearchParams({
-        min_abs: String(dealMinAbs),
+      const qs = new URLSearchParams({
         min_pct: String(dealMinPct),
+        min_abs: String(dealMinAbs),
         limit: String(dealLimit),
       });
-      const r = await fetch(`${PYAPI_BASE}/deals/by-upc?${params.toString()}&t=${Date.now()}`, {
+  
+      const upcR = await fetch(`${API_BASE}/api/amazon/deals-by-upc?${qs.toString()}&t=${Date.now()}`, {
         headers: { "Cache-Control": "no-cache" },
         cache: "no-store",
       });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data?.detail || data?.error || "Fetch UPC deals failed");
-      setDeals(data.deals || []);
-      if (!data.deals?.length) setDealsMsg("No UPC-based deals found yet.");
+      const upcJ = await upcR.json();
+      const upcDeals = Array.isArray(upcJ.deals) ? upcJ.deals : [];
+  
+      // Strict title fallback (optional)
+      const titleR = await fetch(`${API_BASE}/api/amazon/deals/by-title?${qs.toString()}&min_score=0.80&t=${Date.now()}`, {
+        headers: { "Cache-Control": "no-cache" },
+        cache: "no-store",
+      });
+      const titleJ = await titleR.json();
+      const titleDeals = Array.isArray(titleJ.deals) ? titleJ.deals : [];
+  
+      const merged = [...upcDeals, ...titleDeals].slice(0, dealLimit);
+      setDeals(merged);
+      if (!merged.length) setDealsMsg("No deals yet. Try a broader scrape, or build more Amazon cache.");
     } catch (e) {
       setDealsMsg(`Error: ${e.message}`);
     } finally {
       setDealsLoading(false);
     }
   };
+  
   
 
   // Optional autoload
@@ -369,10 +393,10 @@ export default function Dashboard() {
               />
             </label>
 
-            <button className="secondary" onClick={buildAmazonCacheByUPC} disabled={dealsLoading}>
+            <button className="secondary" onClick={buildAmazonCache} disabled={dealsLoading}>
               {dealsLoading ? "Indexing…" : "Build Amazon Cache"}
             </button>
-            <button className="primary" onClick={fetchDealsByUPC} disabled={dealsLoading}>
+            <button className="primary" onClick={fetchDeals} disabled={dealsLoading}>
               {dealsLoading ? "Searching…" : "Find Deals"}
             </button>
           </div>
