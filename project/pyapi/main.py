@@ -129,22 +129,83 @@ async def walmart_product_details(product_id: str):
     return data.get("product_result")
 
 @app.post("/walmart/enrich-upc")
-async def walmart_enrich_upc(limit:int=100):
-    cur = db[WM_COLL].find({"upc":{"$exists":False}}).limit(limit)
+async def walmart_enrich_upc(limit: int = 100):
+    """
+    Enrich recent Walmart items by calling walmart_product:
+      - Try to set: upc (or gtin), brand, category, link
+      - Works even if UPC is absent; we still fill brand/category/link
+    """
+    # Prefer items that are missing ANY of these fields
+    filt = {
+        "$or": [
+            {"upc": {"$exists": False}},
+            {"brand": {"$in": [None, ""]}},
+            {"category": {"$in": [None, ""]}},
+            {"link": {"$in": [None, ""]}},
+        ]
+    }
+
+    projection = {"_id": 1, "product_id": 1, "upc": 1, "brand": 1, "category": 1, "link": 1}
+    cur = db[WM_COLL].find(filt, projection).sort([("updatedAt", -1)]).limit(limit)
     docs = await cur.to_list(length=limit)
-    updated=0
+
+    upc_set = brand_set = cat_set = link_set = 0
+    touched = 0
+
     for d in docs:
+        pid = d.get("product_id")
+        if not pid:
+            continue
         try:
-            pr = await walmart_product_details(d["product_id"])
-            if not pr: continue
-            raw_upc = pr.get("upc") or pr.get("gtin")
+            pr = await walmart_product_details(str(pid))  # SerpAPI walmart_product
+            if not pr:
+                continue
+
+            update = {}
+
+            # UPC/GTIN
+            raw_upc = pr.get("upc") or pr.get("gtin") or pr.get("gtin13") or pr.get("gtin12")
             upc = normalize_upc(raw_upc)
-            if upc:
-                await db[WM_COLL].update_one({"_id":d["_id"]},{"$set":{"upc":upc,"gtin_raw":raw_upc}})
-                updated+=1
-        except: pass
-        await asyncio.sleep(0.3)
-    return {"considered":len(docs),"updated":updated}
+            if upc and not d.get("upc"):
+                update["upc"] = upc
+                update["gtin_raw"] = raw_upc
+                upc_set += 1
+
+            # Brand
+            pr_brand = pr.get("brand") or pr.get("brand_name")
+            if pr_brand and not d.get("brand"):
+                update["brand"] = pr_brand
+                brand_set += 1
+
+            # Category (best-effort)
+            pr_cat = pr.get("category_path") or pr.get("category")
+            if pr_cat and not d.get("category"):
+                update["category"] = pr_cat
+                cat_set += 1
+
+            # Canonical link
+            pr_link = pr.get("product_page_url") or pr.get("link")
+            if pr_link and not d.get("link"):
+                update["link"] = pr_link
+                link_set += 1
+
+            if update:
+                update["updatedAt"] = datetime.utcnow()
+                await db[WM_COLL].update_one({"_id": d["_id"]}, {"$set": update})
+                touched += 1
+
+        except Exception:
+            # ignore per-item errors but keep going
+            pass
+        finally:
+            await asyncio.sleep(0.35)  # avoid SerpAPI 429s
+
+    return {
+        "considered": len(docs),
+        "updated": touched,
+        "set_fields": {"upc": upc_set, "brand": brand_set, "category": cat_set, "link": link_set},
+    }
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Walmart: list items (debug/FE consumption)
