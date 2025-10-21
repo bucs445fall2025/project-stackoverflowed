@@ -815,3 +815,12 @@ async def debug_amazon_search(
         })
 
     return {"q": q, "count": len(out), "results": out}
+
+@app.get("/walmart/upc-sample")
+async def walmart_upc_sample(limit: int = 5):
+    cur = db[WM_COLL].find(
+        {"upc": {"$exists": True}},
+        {"_id": 0, "title": 1, "product_id": 1, "upc": 1}
+    ).limit(limit)
+    items = await cur.to_list(length=limit)
+    return {"sample": items}
