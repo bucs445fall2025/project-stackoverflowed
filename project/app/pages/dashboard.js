@@ -83,9 +83,10 @@ export default function Dashboard() {
     setWmMsg("");
     try {
       const body = { query: "protein powder", max_pages: 1, delay_ms: 700 };
-      const r = await fetch(`${API_BASE}/api/amazon/walmart/scrape`, {
+      const r = await fetch(`${API_BASE}/api/amazon/walmart/scrape?t=${Date.now()}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-cache" },
+        cache: "no-store",
         body: JSON.stringify(body),
       });
       const data = await r.json();
@@ -104,7 +105,10 @@ export default function Dashboard() {
     setWmLoading(true);
     setWmMsg("");
     try {
-      const r = await fetch(`${API_BASE}/api/amazon/walmart/items?limit=30`);
+      const r = await fetch(`${API_BASE}/api/amazon/walmart/items?limit=30&t=${Date.now()}`, {
+        headers: { "Cache-Control": "no-cache" },
+        cache: "no-store",
+      });
       const data = await r.json();
       if (!r.ok) throw new Error(data?.error || "Failed to load items");
       setWmItems(Array.isArray(data.items) ? data.items : []);
@@ -134,9 +138,10 @@ export default function Dashboard() {
         min_score: dealMinScore,
         ...(dealCategory.trim() ? { category: dealCategory.trim() } : {}),
       };
-      const r = await fetch(`${API_BASE}/api/amazon/index-by-title`, {
+      const r = await fetch(`${API_BASE}/api/amazon/index-by-title?t=${Date.now()}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-cache" },
+        cache: "no-store",
         body: JSON.stringify(body),
       });
       const data = await r.json();
@@ -165,7 +170,10 @@ export default function Dashboard() {
         params.set("kw", dealCategory.trim());       // fallback: title keyword
       }
   
-      const r = await fetch(`${PYAPI_BASE}/deals/by-title?${params.toString()}`);
+      const r = await fetch(`${PYAPI_BASE}/deals/by-title?${params.toString()}&t=${Date.now()}`, {
+        headers: { "Cache-Control": "no-cache" },
+        cache: "no-store",
+      });
       const data = await r.json();
       if (!r.ok) throw new Error(data?.detail || data?.error || "Failed to fetch deals");
       const arr = Array.isArray(data.deals) ? data.deals : [];
