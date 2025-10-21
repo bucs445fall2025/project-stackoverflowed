@@ -71,13 +71,49 @@ def parse_price(v) -> Optional[float]:
 async def serp_get(url: str, q: dict):
     if not SERPAPI_KEY:
         raise HTTPException(500, "SERPAPI_KEY not set")
-    q["api_key"] = SERPAPI_KEY
-    timeout = httpx.Timeout(30.0, connect=15.0)
+
+    # help avoid stale cache (optional)
+    q = {**q, "api_key": SERPAPI_KEY, "no_cache": "true"}
+
+    # generous timeouts + retries with jitter
+    timeout = httpx.Timeout(connect=20.0, read=45.0, write=20.0, pool=20.0)
+
     async with httpx.AsyncClient(timeout=timeout) as c:
-        r = await c.get(url, params=q)
-        if r.status_code >= 400:
-            raise HTTPException(r.status_code, detail=r.text)
-        return r.json()
+        last_err = None
+        for attempt in range(5):  # up to 5 tries
+            try:
+                r = await c.get(url, params=q)
+                # propagate 4xx/5xx but keep the body for debugging
+                if r.status_code >= 400:
+                    detail = None
+                    try:
+                        detail = r.json()
+                    except Exception:
+                        detail = {"text": r.text}
+                    # 429 from SerpAPI => backoff and retry (unless last try)
+                    if r.status_code == 429 and attempt < 4:
+                        await asyncio.sleep(1.5 * (2 ** attempt) + random.random())
+                        continue
+                    raise HTTPException(status_code=r.status_code, detail=detail)
+                return r.json()
+
+            except httpx.ReadTimeout as e:
+                last_err = e
+                if attempt < 4:
+                    # exponential backoff with jitter
+                    await asyncio.sleep(0.8 * (2 ** attempt) + random.random())
+                    continue
+                # final attempt failed → surface as 504
+                raise HTTPException(status_code=504, detail="SerpAPI request timed out") from e
+            except (httpx.ConnectError, httpx.RemoteProtocolError) as e:
+                last_err = e
+                if attempt < 4:
+                    await asyncio.sleep(0.6 * (2 ** attempt) + random.random())
+                    continue
+                raise HTTPException(status_code=502, detail="Network error calling SerpAPI") from e
+
+        # should not reach here, but just in case:
+        raise HTTPException(status_code=502, detail=str(last_err) if last_err else "Unknown SerpAPI error")
 
 def normalize_upc(gtin: Optional[str]) -> Optional[str]:
     if not gtin: return None
@@ -184,11 +220,19 @@ def title_sim(a: str, b: str) -> float:
 # ──────────────────────────────────────────────────────────────────────────────
 # Walmart ingest
 # ──────────────────────────────────────────────────────────────────────────────
-async def walmart_search_page(query: str, page: int=1):
-    return await serp_get("https://serpapi.com/search.json", {
-        "engine":"walmart", "query":query, "page":page, "hl":"en", "gl":"us"
-    })
-
+async def walmart_search_page(query: str, page: int = 1):
+    return await serp_get(
+        "https://serpapi.com/search.json",
+        {
+            "engine": "walmart",
+            "query": query,
+            "page": page,
+            "hl": "en",
+            "gl": "us",
+            # "store_id": "optional-store-id",  # if you want local results later
+            "no_cache": "true",
+        },
+    )
 class WalmartScrapeReq(BaseModel):
     query: str
     pages: int = Field(1, ge=1, le=10)
@@ -196,17 +240,38 @@ class WalmartScrapeReq(BaseModel):
 
 @app.post("/walmart/scrape")
 async def walmart_scrape(req: WalmartScrapeReq):
-    inserted, updated, total = 0,0,0
-    for pg in range(1, req.pages+1):
-        if total >= req.max_products: break
-        data = await walmart_search_page(req.query, page=pg)
-        items = data.get("organic_results", [])
+    inserted = updated = total = 0
+    pages_fetched = 0
+    page_errors = 0
+
+    for pg in range(1, req.pages + 1):
+        if total >= req.max_products:
+            break
+
+        try:
+            data = await walmart_search_page(req.query, page=pg)
+            items = data.get("organic_results", []) or []
+            pages_fetched += 1
+        except HTTPException as e:
+            # record and continue to next page instead of 500-ing
+            page_errors += 1
+            # brief pause in case of rate limiting
+            await asyncio.sleep(1.0 + random.random())
+            continue
+
         for it in items:
+            if total >= req.max_products:
+                break
+
             pid = it.get("product_id")
-            if not pid: continue
+            if not pid:
+                continue
+
             po = it.get("primary_offer") or {}
             price = parse_price(po.get("offer_price") or po.get("price") or it.get("price"))
-            if price is None: continue
+            if price is None:
+                continue
+
             doc = {
                 "product_id": str(pid),
                 "title": it.get("title"),
@@ -217,15 +282,30 @@ async def walmart_scrape(req: WalmartScrapeReq):
                 "category": it.get("category"),
                 "updatedAt": now_utc(),
             }
+
             res = await db[WM_COLL].update_one(
                 {"product_id": str(pid)},
                 {"$set": doc, "$setOnInsert": {"createdAt": now_utc()}},
-                upsert=True
+                upsert=True,
             )
-            if res.upserted_id: inserted+=1
-            else: updated+=res.modified_count
-            total+=1
-    return {"inserted":inserted,"updated":updated,"total":total}
+            if res.upserted_id:
+                inserted += 1
+            else:
+                updated += res.modified_count
+            total += 1
+
+        # small delay between pages to avoid bursts/429s
+        await asyncio.sleep(0.4 + random.random() * 0.3)
+
+    return {
+        "query": req.query,
+        "pages_requested": req.pages,
+        "pages_fetched": pages_fetched,
+        "page_errors": page_errors,
+        "inserted": inserted,
+        "updated": updated,
+        "total": total,
+    }
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Walmart UPC enrichment

@@ -9,7 +9,7 @@ const app = express(); // Create a new express app instance
 app.use(cors({ origin: '*' })); // Add CORS middleware to the app instance. '*' = any domain can send reqs here
 app.use(express.json()); // Adds middleware to automatically parse incoming JSON in request bodies 
 
-// Routes
+// Routes --- using /api/amazon for all the data ingestion/processing routes for continuity and ease of use
 const amazonRoutes = require('./routes/amazonRoutes'); // Importing amazon routes
 app.use('/api/amazon', amazonRoutes); // Mounts them under /api/amazon so any reqs to /api/amazon/... will be handled by that router
 const userRoutes = require('./routes/userRoutes'); // Importing user routes
@@ -19,6 +19,8 @@ const walmartRoutes = require('./routes/walmartRoutes');
 app.use('/api/amazon', walmartRoutes); 
 const walmartRead = require('./routes/walmartRead');
 app.use('/api/amazon', walmartRead);
+
+
 const dbDebug = require("./routes/dbDebug");
 app.use("/api", dbDebug);
 const usersDebug = require("./routes/usersDebug");
