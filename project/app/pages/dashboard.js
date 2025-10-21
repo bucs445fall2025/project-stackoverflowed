@@ -92,6 +92,9 @@ export default function Dashboard() {
       const data = await r.json();
       if (!r.ok) throw new Error(data?.detail || data?.error || "Ingestion failed");
       setWmMsg(`Ingested ${data.inserted} new / ${data.updated} updated (processed ${data.total_processed})`);
+      const e = await enrichUPC(200);
+      setWmMsg(prev => `${prev} | UPCs: considered ${e.considered ?? "?"}, updated ${e.updated ?? "0"}`);
+      
       await fetchWalmartItems();
     } catch (e) {
       setWmMsg(`Error: ${e.message}`);
@@ -99,6 +102,17 @@ export default function Dashboard() {
       setWmIngesting(false);
     }
   };
+
+  async function enrichUPC(limit = 200) {
+    const r = await fetch(`${API_BASE}/api/amazon/walmart/enrich-upc?limit=${limit}`, {
+      method: 'POST',
+      headers: { 'Cache-Control': 'no-cache' },
+      cache: 'no-store'
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data?.detail || data?.error || 'UPC enrich failed');
+    return data;
+  }
 
   // Walmart: fetch items
   const fetchWalmartItems = async () => {
@@ -123,9 +137,9 @@ export default function Dashboard() {
   };
 
   // Autoload Walmart items
-  useEffect(() => {
-    fetchWalmartItems();
-  }, []);
+  // useEffect(() => {
+  //   fetchWalmartItems();
+  // }, []);
 
   // Build Amazon cache by title/brand
   const buildAmazonCacheByTitle = async () => {
@@ -188,9 +202,9 @@ export default function Dashboard() {
   
 
   // Optional autoload
-  useEffect(() => {
-    fetchDeals();
-  }, []);
+  // useEffect(() => {
+  //   fetchDeals();
+  // }, []);
 
   return (
     <div className="dash-wrap">

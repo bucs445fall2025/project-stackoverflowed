@@ -43,6 +43,18 @@ router.post("/walmart/scrape", async (req, res) => {
   }
 });
 
+//UPC enrichment proxy
+router.post('/walmart/enrich-upc', async (req, res, next) => {
+  try {
+    const limit = Number(req.query.limit || req.body?.limit || 100);
+    const r = await fetch(`${process.env.PYAPI_URL}/walmart/enrich-upc?limit=${limit}`, {
+      method: 'POST',
+    });
+    const data = await r.json().catch(() => ({}));
+    res.status(r.status).json(data);
+  } catch (e) { next(e); }
+});
+
 // GET /api/amazon/walmart/items -> proxies to FastAPI /walmart/stats
 router.get("/walmart/items", async (req, res) => {
   try {
