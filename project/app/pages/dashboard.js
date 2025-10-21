@@ -82,7 +82,7 @@ export default function Dashboard() {
     setWmIngesting(true);
     setWmMsg("");
     try {
-      const body = { query: "protein powder", max_pages: 1, delay_ms: 700 };
+      const body = { query: "protein powder", pages: 1, max_products: 80, delay_ms: 700 };
       const r = await fetch(`${API_BASE}/api/amazon/walmart/scrape?t=${Date.now()}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Cache-Control": "no-cache" },
@@ -94,7 +94,7 @@ export default function Dashboard() {
       setWmMsg(`Ingested ${data.inserted} new / ${data.updated} updated (processed ${data.total_processed})`);
       const e = await enrichUPC(200);
       setWmMsg(prev => `${prev} | UPCs: considered ${e.considered ?? "?"}, updated ${e.updated ?? "0"}`);
-      
+
       await fetchWalmartItems();
     } catch (e) {
       setWmMsg(`Error: ${e.message}`);
