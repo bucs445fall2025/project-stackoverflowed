@@ -12,6 +12,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone, timedelta
 import httpx, asyncio, os, re, random, difflib
+from rapidfuzz import fuzz
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Setup
@@ -157,6 +158,27 @@ def title_score(wm_title: str, amz_title: str, brand: Optional[str]=None) -> flo
     if brand and brand.lower() in (amz_title or "").lower():
         base += 0.05
     return max(0.0, min(base, 1.0))
+
+AMZ_SSP_PAT = "sspa/click"
+
+def clean_amz_link(asin: Optional[str], link: Optional[str]) -> Optional[str]:
+    """
+    Prefer a canonical dp link if we have an ASIN. Also reject sponsored redirect links.
+    """
+    if asin:
+        return f"https://www.amazon.com/dp/{asin}"
+    if link and AMZ_SSP_PAT not in link:
+        return link
+    return None
+
+def brand_norm(s: Optional[str]) -> str:
+    return re.sub(r"[^a-z0-9]+", "", (s or "").lower())
+
+def title_sim(a: str, b: str) -> float:
+    """
+    RapidFuzz token_set_ratio gives robust order/dup handling (0–100).
+    """
+    return float(fuzz.token_set_ratio(a or "", b or ""))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -332,23 +354,54 @@ async def walmart_items(
     items = await cur.to_list(length=limit)
     return {"items": items}
 
+# TO CLEAR THE DATABASE 
+@app.delete("/debug/clear-db")
+async def clear_db():
+    wm_res = await db[WM_COLL].delete_many({})
+    amz_res = await db[AMZ_COLL].delete_many({})
+    return {
+        "walmart_deleted": wm_res.deleted_count,
+        "amazon_deleted": amz_res.deleted_count,
+    }
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Amazon cache by UPC
 # ──────────────────────────────────────────────────────────────────────────────
 async def serp_amazon_by_upc(upc: str) -> Optional[Dict[str,Any]]:
-    data = await serp_get("https://serpapi.com/search.json",{
-        "engine":"amazon","amazon_domain":"amazon.com","k":upc,"gl":"us","hl":"en"
+    data = await serp_get("https://serpapi.com/search.json", {
+        "engine":"amazon", "amazon_domain":"amazon.com", "k":upc, "gl":"us", "hl":"en"
     })
+
+    best = None
+    best_price = None
+    # Prefer organic (non-sponsored) and items that actually have price + asin
     for it in data.get("organic_results", []):
-        if not is_valid_amz_result(it):
+        if not it: 
             continue
-        p = parse_price(it.get("price"))
-        if p is None:
+        price = parse_price(it.get("price"))
+        asin  = it.get("asin")
+        link  = it.get("link")
+        if price is None or not asin:
             continue
-        it["price_num"] = p
-        return it
-    return None
+        # kill sspa redirects; construct clean dp link
+        link = clean_amz_link(asin, link)
+        if not link:
+            continue
+
+        # first good one wins for UPC (usually exact)
+        best = {
+            "asin": asin,
+            "title": it.get("title") or "",
+            "brand": it.get("brand"),
+            "link": link,
+            "price_num": price,
+        }
+        best_price = price
+        break
+
+    return best
+
 
 async def serp_amazon_by_title(title: str, brand: Optional[str], min_accept_score: float = 0.80) -> Optional[Dict[str, Any]]:
     q = f"{brand} {title}" if brand else title
@@ -415,84 +468,222 @@ async def index_amazon_by_upc(limit:int=200, recache_hours:int=48):
 
 
 class IndexAmazonByTitleReq(BaseModel):
-    category: Optional[str] = None
-    kw: Optional[str] = None
-    limit_items: int = 200
-    recache_hours: int = 48
-    max_serp_calls: int = 60
-    min_score: float = 0.80
+    category: Optional[str] = None          # optional Walmart category filter
+    kw: Optional[str] = None                # optional title keyword filter
+    limit_items: int = 400                  # how many Walmart items to consider
+    recache_hours: int = 48                 # skip re-fetching recent cache
+    max_serp_calls: int = 200               # hard cap on SerpAPI calls this run
+    min_similarity: int = 86                # RapidFuzz token_set_ratio threshold (0..100)
+    require_brand: bool = True              # if Walmart brand is known, require the brand to appear in Amazon title
+    per_call_delay_ms: int = 350            # throttle to avoid SerpAPI 429s
+
+def _norm_brand(b: Optional[str]) -> Optional[str]:
+    if not b:
+        return None
+    b = re.sub(r"[^a-z0-9]+", " ", b.lower()).strip()
+    return b or None
+
+def _brand_in_title(brand: Optional[str], title: Optional[str]) -> bool:
+    if not brand or not title:
+        return False
+    b = _norm_brand(brand)
+    t = re.sub(r"[^a-z0-9]+", " ", title.lower())
+    if not b:
+        return False
+    # loose contains and token match
+    return b in t or any(tok and tok in t for tok in b.split())
+
+def _pick_best_amz_by_title(
+    wm_title: str,
+    amz_candidates: List[Dict[str, Any]],
+    *,
+    wm_brand: Optional[str],
+    min_similarity: int,
+    require_brand: bool
+) -> Optional[Dict[str, Any]]:
+    """
+    Choose the best Amazon result using RapidFuzz token_set_ratio.
+    Optionally require that the Walmart brand appears in the Amazon title.
+    """
+    best: Optional[Dict[str, Any]] = None
+    best_score = -1
+
+    for it in amz_candidates or []:
+        # normalize + price
+        title = it.get("title") or ""
+        price_num = parse_price(it.get("price"))
+        if not title or price_num is None:
+            continue
+
+        sim = fuzz.token_set_ratio(wm_title, title)
+        if sim < min_similarity:
+            continue
+
+        if require_brand and wm_brand:
+            if not _brand_in_title(wm_brand, title):
+                continue
+
+        # favor non-sponsored a bit, and slightly favor shorter titles
+        sponsored = str(it.get("badge") or it.get("sponsored") or "").lower().find("sponsor") >= 0
+        adj = sim - (3 if sponsored else 0) + (2 if len(title) < 140 else 0)
+
+        if adj > best_score:
+            best_score = adj
+            best = {
+                "asin": it.get("asin"),
+                "title": title,
+                "link": it.get("link") or it.get("product_link"),
+                "price_num": price_num,
+                "raw_badge": it.get("badge"),
+                "sim": sim,
+            }
+
+    return best
 
 @app.post("/amazon/index-by-title")
 async def index_amazon_by_title(req: IndexAmazonByTitleReq):
-    cutoff = datetime.utcnow() - timedelta(hours=req.recache_hours)
-    match: Dict[str, Any] = {
-        "title": {"$exists": True, "$ne": None},
-        "product_id": {"$exists": True, "$ne": None},
-        # only items WITHOUT UPC (fallback pool)
-        "upc": {"$exists": False}
-    }
+    """
+    Build/refresh the Amazon cache by fuzzy title/brand for Walmart items using SerpAPI.
+    Caches one Amazon offer per Walmart product_id under key_type="wm_pid".
+    """
+    if not SERPAPI_KEY:
+        raise HTTPException(500, "SERPAPI_KEY not set")
+
+    # Walmart candidate filter
+    match: Dict[str, Any] = {"title": {"$exists": True, "$ne": None}}
     if req.category:
-        match["category"] = {"$regex": req.category, "$options": "i"}
+        match["category"] = req.category
     if req.kw:
         match["title"] = {"$regex": req.kw, "$options": "i"}
 
-    items = await db[WM_COLL].find(
-        match, {"_id":1,"product_id":1,"title":1,"brand":1,"price":1}
-    ).sort([("updatedAt",-1)]).limit(req.limit_items).to_list(req.limit_items)
+    cutoff = datetime.utcnow() - timedelta(hours=req.recache_hours)
 
-    to_fetch = []
-    for it in items:
+    # Pull recent Walmart items
+    wm_candidates = await db[WM_COLL].find(
+        match,
+        {"_id": 0, "product_id": 1, "title": 1, "brand": 1, "price": 1, "updatedAt": 1},
+    ).sort([("updatedAt", -1)]).limit(req.limit_items).to_list(req.limit_items)
+
+    # Filter out those with fresh cache
+    to_fetch: List[Dict[str, Any]] = []
+    for it in wm_candidates:
         pid = str(it.get("product_id") or "")
-        if not pid: continue
+        if not pid:
+            continue
         cached = await db[AMZ_COLL].find_one(
-            {"key_type":"wm_pid","key_val":pid,"checked_at":{"$gte":cutoff}}
+            {"key_type": "wm_pid", "key_val": pid, "checked_at": {"$gte": cutoff}},
+            {"_id": 1}
         )
         if not cached:
             to_fetch.append(it)
 
+    # Respect SERP cap
     to_fetch = to_fetch[: max(0, req.max_serp_calls)]
-    fetched = misses = 0
+
+    fetched_now = 0
+    misses = 0
+    below_threshold = 0
+    skipped_no_pid = 0
 
     for it in to_fetch:
         pid = str(it.get("product_id") or "")
+        if not pid:
+            skipped_no_pid += 1
+            continue
+
+        wm_title = it.get("title") or ""
+        wm_brand  = it.get("brand")
+
+        # Amazon search via SerpAPI (use `k`, not `q`)
         try:
-            amz = await serp_amazon_by_title(it.get("title",""), it.get("brand"), min_accept_score=req.min_score)
-            if not amz:
-                await db[AMZ_COLL].update_one(
-                    {"key_type":"wm_pid","key_val":pid},
-                    {"$set":{
-                        "key_type":"wm_pid","key_val":pid,"miss":True,
-                        "checked_at": datetime.utcnow(),
-                        "last_title": it.get("title"), "last_brand": it.get("brand"),
-                    }},
-                    upsert=True
-                )
-                misses += 1
-                continue
-
-            doc = {
-                "key_type":"wm_pid","key_val":pid,
-                "amz":{
-                    "asin": amz.get("asin"),
-                    "title": amz.get("title"),
-                    "link": amz.get("link"),
-                    "brand": amz.get("brand"),
-                    "match_score": amz.get("match_score"),
+            data = await serp_get(
+                "https://serpapi.com/search.json",
+                {
+                    "engine": "amazon",
+                    "amazon_domain": "amazon.com",
+                    "k": wm_title if not wm_brand else f"{wm_brand} {wm_title}",
+                    "gl": "us",
+                    "hl": "en",
                 },
-                "price": amz.get("price_num"),
-                "checked_at": datetime.utcnow(),
-                "last_title": it.get("title"),
-                "last_brand": it.get("brand"),
-                "reason": "title_match_size_ok"
-            }
-            await db[AMZ_COLL].update_one({"key_type":"wm_pid","key_val":pid},{"$set":doc}, upsert=True)
-            fetched += 1
-        except Exception:
+            )
+        except HTTPException as e:
+            # Record a miss so we don’t hammer the same pid repeatedly
+            await db[AMZ_COLL].update_one(
+                {"key_type": "wm_pid", "key_val": pid},
+                {"$set": {
+                    "key_type": "wm_pid",
+                    "key_val": pid,
+                    "checked_at": datetime.utcnow(),
+                    "miss": True,
+                    "err": f"serpapi:{e.status_code}"
+                }},
+                upsert=True,
+            )
             misses += 1
-        finally:
-            await asyncio.sleep(0.45)
+            await asyncio.sleep(req.per_call_delay_ms / 1000.0)
+            continue
 
-    return {"considered": len(items), "queued": len(to_fetch), "fetched_now": fetched, "misses": misses}
+        candidates = data.get("organic_results") or []
+        best = _pick_best_amz_by_title(
+            wm_title,
+            candidates,
+            wm_brand=wm_brand,
+            min_similarity=req.min_similarity,
+            require_brand=req.require_brand,
+        )
+
+        if not best:
+            # Either truly no result, or all below threshold/brand mismatch
+            await db[AMZ_COLL].update_one(
+                {"key_type": "wm_pid", "key_val": pid},
+                {"$set": {
+                    "key_type": "wm_pid",
+                    "key_val": pid,
+                    "checked_at": datetime.utcnow(),
+                    "miss": True,
+                    "last_title": wm_title,
+                    "last_brand": wm_brand,
+                }},
+                upsert=True,
+            )
+            misses += 1
+        else:
+            # Write a normalized cache document
+            doc = {
+                "key_type": "wm_pid",
+                "key_val": pid,
+                "amz": {
+                    "asin": best.get("asin"),
+                    "title": best.get("title"),
+                    "link": best.get("link"),
+                    "match_score_sim": best.get("sim"),  # 0..100 RapidFuzz token_set_ratio
+                    "brand_required": bool(req.require_brand and wm_brand),
+                },
+                "price": best.get("price_num"),
+                "checked_at": datetime.utcnow(),
+                "last_title": wm_title,
+                "last_brand": wm_brand,
+            }
+            await db[AMZ_COLL].update_one(
+                {"key_type": "wm_pid", "key_val": pid},
+                {"$set": doc},
+                upsert=True,
+            )
+            fetched_now += 1
+
+        # throttle to avoid 429
+        await asyncio.sleep(req.per_call_delay_ms / 1000.0)
+
+    return {
+        "considered": len(wm_candidates),
+        "queued": len(to_fetch),
+        "fetched_now": fetched_now,
+        "misses": misses,
+        "skipped_no_pid": skipped_no_pid,
+        "threshold": req.min_similarity,
+        "brand_required": req.require_brand,
+        "recache_hours": req.recache_hours,
+    }
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -524,47 +715,63 @@ async def deals_by_upc(min_abs:float=5.0,min_pct:float=0.2,limit:int=100):
 
 @app.get("/deals/by-title")
 async def deals_by_title(
-    min_abs: float = Query(5.0),
-    min_pct: float = Query(0.20),
-    min_score: float = Query(0.80),
-    limit: int = Query(100, ge=1, le=500),
+    min_abs: float = 5.0,
+    min_pct: float = 0.20,
+    min_sim: int = 86,
+    limit: int = 100,
 ):
-    q = {"title":{"$exists":True,"$ne":None}}
-    wm_rows = await db[WM_COLL].find(q, {"_id":0}).sort([("updatedAt",-1)]).limit(limit*5).to_list(length=limit*5)
-    out = []
-    for wm in wm_rows:
+    """
+    Join Walmart items with cached Amazon offers (by fuzzy title).
+    Only count as a deal if:
+      - Amazon match_score_sim >= min_sim
+      - Amazon price > Walmart price
+      - Savings exceed thresholds
+    """
+    wm_items = await db[WM_COLL].find({}).to_list(length=limit * 5)
+    deals = []
+
+    for wm in wm_items:
         wm_price = parse_price(wm.get("price"))
-        if not wm_price or wm_price <= 0: continue
-        pid = str(wm.get("product_id") or ""); 
-        if not pid: continue
+        if not wm_price:
+            continue
 
-        amz_cache = await db[AMZ_COLL].find_one(
-            {"key_type":"wm_pid","key_val":pid,"miss":{"$ne":True}},
-            sort=[("checked_at",-1)]
-        )
-        if not amz_cache: continue
-        amz = amz_cache.get("amz") or {}
-        score = float(amz.get("match_score") or 0.0)
-        if score < min_score: continue
+        pid = str(wm.get("product_id") or "")
+        if not pid:
+            continue
 
-        # final safety checks
-        if not brand_ok(wm.get("brand"), amz.get("title") or ""): continue
-        if not sizes_compatible(wm.get("title") or "", amz.get("title") or ""): continue
+        amz_cache = await db[AMZ_COLL].find_one({"key_type": "wm_pid", "key_val": pid})
+        if not amz_cache:
+            continue
 
-        amz_price = parse_price(amz_cache.get("price") or amz.get("price"))
-        if not amz_price or amz_price <= 0: continue
+        amz_price = parse_price(amz_cache.get("price"))
+        amz_meta  = amz_cache.get("amz") or {}
+        sim_score = amz_meta.get("match_score_sim") or 0
+
+        if not amz_price or sim_score < min_sim:
+            continue
 
         diff = amz_price - wm_price
-        pct  = diff / amz_price if amz_price > 0 else 0
+        pct = diff / amz_price if amz_price > 0 else 0
+
         if diff >= min_abs and pct >= min_pct:
-            out.append({
-                "wm": {"title": wm.get("title"), "price": round(wm_price,2), "link": wm.get("link"), "brand": wm.get("brand")},
-                "amz": {"title": amz.get("title"), "price": round(amz_price,2), "link": amz.get("link"), "asin": amz.get("asin"), "match_score": score},
-                "savings_abs": round(diff,2), "savings_pct": round(pct*100,1),
-                "reason": amz_cache.get("reason") or "title_match_size_ok"
+            deals.append({
+                "wm": {
+                    "title": wm.get("title"),
+                    "price": wm_price,
+                    "link": wm.get("link"),
+                },
+                "amz": {
+                    "title": amz_meta.get("title"),
+                    "price": amz_price,
+                    "link": amz_meta.get("link"),
+                    "sim": sim_score,
+                },
+                "savings_abs": diff,
+                "savings_pct": round(pct * 100, 2),
             })
-        if len(out) >= limit: break
 
-    out.sort(key=lambda d: (d["savings_abs"], d["savings_pct"]), reverse=True)
-    return {"count": len(out), "deals": out[:limit]}
+        if len(deals) >= limit:
+            break
 
+    deals.sort(key=lambda d: d["savings_abs"], reverse=True)
+    return {"count": len(deals), "deals": deals[:limit]}
