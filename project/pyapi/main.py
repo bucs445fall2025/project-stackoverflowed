@@ -90,6 +90,28 @@ async def serp_get(url: str, q: dict):
                     continue
                 raise HTTPException(status_code=504, detail="SerpAPI request timed out")
 
+async def serp_amazon_by_upc(upc: str) -> Optional[Dict[str, Any]]:
+    data = await serp_get(
+        "https://serpapi.com/search.json",
+        {"engine": "amazon", "amazon_domain": "amazon.com", "k": upc, "gl": "us", "hl": "en"}
+    )
+    for it in data.get("organic_results", []):
+        p = parse_price(it.get("price"))
+        if p is None:
+            continue
+        # When searching by UPC, first organic with a price is usually correct.
+        it["price_num"] = p
+        it["match_score"] = 1.0  # exact-id basis
+        return it
+    return None
+
+
+async def walmart_product_details(product_id: str) -> Optional[Dict[str, Any]]:
+    data = await serp_get(
+        "https://serpapi.com/search.json",
+        {"engine": "walmart_product", "product_id": product_id}
+    )
+    return data.get("product_result")
 
 # Type-safe Mongo “to number”
 def to_num(expr: Any) -> Dict[str, Any]:
@@ -176,6 +198,7 @@ def unit_price(price: Optional[float], grams: Optional[float], count: int) -> Op
 async def _startup_indexes():
     # Walmart items (no UPC index needed now)
     await db[WM_COLL].create_index("product_id", unique=True, sparse=True)
+    await db[WM_COLL].create_index("upc", sparse=True)
     await db[WM_COLL].create_index("category", sparse=True)
     await db[WM_COLL].create_index([("updatedAt", -1)])
     # Amazon offers cache
@@ -292,6 +315,40 @@ async def walmart_scrape(req: WalmartScrapeRequest):
             "skipped_no_pid": skipped_no_pid,
             "skipped_no_price": skipped_no_price,
         }
+    
+@app.post("/walmart/enrich-upc")
+async def walmart_enrich_upc(limit: int = 200):
+    coll = db[WM_COLL]
+    cur = coll.find(
+        {"product_id": {"$exists": True, "$ne": None}, "upc": {"$exists": False}},
+        {"_id": 1, "product_id": 1, "us_item_id": 1}
+    ).sort([("updatedAt", -1)]).limit(limit)
+    docs = await cur.to_list(length=limit)
+
+    updated = 0
+    for d in docs:
+        pid = str(d.get("product_id"))
+        try:
+            pr = await walmart_product_details(pid)
+            if not pr:
+                continue
+            raw_upc = pr.get("upc") or pr.get("gtin") or pr.get("gtin13") or pr.get("gtin12")
+            upc = normalize_upc(raw_upc)
+            update = {}
+            if upc:
+                update["upc"] = upc
+            # store raw too (debug/edge-cases)
+            if raw_upc:
+                update["gtin_raw"] = raw_upc
+            if update:
+                await coll.update_one({"_id": d["_id"]}, {"$set": update})
+                updated += 1
+        except Exception:
+            pass
+        finally:
+            await asyncio.sleep(0.35)  # be kind to SerpAPI
+    return {"considered": len(docs), "updated": updated}
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Amazon via SerpAPI — match by Title/Brand
@@ -413,7 +470,16 @@ async def index_amazon_by_title(req: IndexAmazonByTitleReq):
             continue
 
         try:
-            amz = await serp_amazon_by_title(it.get("title", ""), it.get("brand"))
+            wm_doc = await db[WM_COLL].find_one({"product_id": pid}, {"upc": 1, "title": 1, "brand": 1})
+            upc = wm_doc.get("upc") if wm_doc else None
+
+            amz = None
+            if upc:
+                amz = await serp_amazon_by_upc(upc)
+
+            if not amz:
+                amz = await serp_amazon_by_title(it.get("title", ""), it.get("brand"))
+
             ok = bool(amz) and float(amz.get("match_score") or 0.0) >= float(req.min_score)
 
             if not ok:
@@ -692,7 +758,21 @@ async def normalize_walmart(limit: int = 500):
             touched += 1
     return {"normalized": touched}
 
-
+def normalize_upc(gtin: Optional[str]) -> Optional[str]:
+    """
+    Return a 12-digit UPC-A if possible:
+    - If 13 digits and starts with '0', drop the leading 0 (common EAN-13 → UPC-A).
+    - Else if 12 digits, return as-is.
+    - Otherwise return None.
+    """
+    if not gtin: 
+        return None
+    s = re.sub(r"\D", "", str(gtin))
+    if len(s) == 13 and s.startswith("0"):
+        return s[1:]
+    if len(s) == 12:
+        return s
+    return None
 
 
 
