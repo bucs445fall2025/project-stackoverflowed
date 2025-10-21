@@ -20,3 +20,42 @@ router.get('/spapi/products', amazonController.sandboxCheck);
 
 // Exports the router so it can be imported into app.js
 module.exports = router;
+
+router.post("/amazon/scrape-category", async (req, res) => {
+    try {
+      const r = await fetch(`${process.env.PYAPI_URL}/amazon/scrape-category`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req.body),
+      });
+      const data = await r.json();
+      res.status(r.status).json(data);
+    } catch (err) {
+      res.status(500).json({ error: "Proxy failed", detail: err.message });
+    }
+  });
+
+  router.post("/index-upc", async (req, res) => {
+    try {
+      const r = await fetch(`${process.env.PYAPI_URL}/amazon/index-upc`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req.body),
+      });
+      const data = await r.json();
+      res.status(r.status).json(data);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.get("/deals-by-upc", async (req, res) => {
+    try {
+      const qs = new URLSearchParams(req.query).toString();
+      const r = await fetch(`${process.env.PYAPI_URL}/deals/by-upc?${qs}`);
+      const data = await r.json();
+      res.status(r.status).json(data);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });

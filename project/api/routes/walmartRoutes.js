@@ -71,6 +71,19 @@ router.get("/walmart/items", async (req, res) => {
 
 module.exports = router;
 
+router.post("/walmart/scrape-category", async (req, res) => {
+  try {
+    const r = await fetch(`${process.env.PYAPI_URL}/walmart/scrape-category`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req.body),
+    });
+    const data = await r.json();
+    res.status(r.status).json(data);
+  } catch (err) {
+    res.status(500).json({ error: "Proxy failed", detail: err.message });
+  }
+});
 
 //Should probably put these routes below in a separate amazon cache file , this is calling amazon serp routes
 

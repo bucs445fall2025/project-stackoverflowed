@@ -76,6 +76,23 @@ export default function Dashboard() {
   const handleLinkFBA = () => {
     window.location.href = `${API_BASE}/api/amazon/auth/login`;
   };
+  const scrapeWalmartCategory = async (categoryKey, query) => {
+    const r = await fetch(`${API_BASE}/api/amazon/walmart/scrape-category`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ category_key: categoryKey, query, pages: 1 }),
+    });
+    return r.json();
+  };
+
+  const scrapeAmazonCategory = async (categoryKey, query) => {
+    const r = await fetch(`${API_BASE}/api/amazon/scrape-category`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ category_key: categoryKey, query, pages: 1 }),
+    });
+    return r.json();
+  };
 
   // Walmart: ingest via Node proxy -> pyapi
   const ingestWalmart = async () => {
@@ -142,25 +159,19 @@ export default function Dashboard() {
   // }, []);
 
   // Build Amazon cache by title/brand
-  const buildAmazonCacheByTitle = async () => {
+  const buildAmazonCacheByUPC = async () => {
     setDealsMsg("");
     setDealsLoading(true);
     try {
-      const body = {
-        limit_items: 40,
-        max_serp_calls: 25,
-        min_score: dealMinScore,
-        ...(dealCategory.trim() ? { category: dealCategory.trim() } : {}),
-      };
-      const r = await fetch(`${API_BASE}/api/amazon/index-by-title?t=${Date.now()}`, {
+      const r = await fetch(`${API_BASE}/api/amazon/index-upc?t=${Date.now()}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Cache-Control": "no-cache" },
         cache: "no-store",
-        body: JSON.stringify(body),
+        body: JSON.stringify({ limit: 200 })  // optional body
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data?.detail || data?.error || "Index failed");
-      setDealsMsg(`Indexed: ${data.fetched_now} (misses: ${data.misses})`);
+      if (!r.ok) throw new Error(data?.detail || data?.error || "Index UPC failed");
+      setDealsMsg(`Indexed UPCs: fetched ${data.fetched}, misses ${data.misses}`);
     } catch (e) {
       setDealsMsg(`Error: ${e.message}`);
     } finally {
@@ -169,30 +180,23 @@ export default function Dashboard() {
   };
 
   // Fetch deals (title/brand match)
-  const fetchDeals = async () => {
+  const fetchDealsByUPC = async () => {
     setDealsLoading(true);
     setDealsMsg("");
     try {
       const params = new URLSearchParams({
-        min_pct: String(dealMinPct),
         min_abs: String(dealMinAbs),
-        min_score: String(dealMinScore),
+        min_pct: String(dealMinPct),
         limit: String(dealLimit),
       });
-      if (dealCategory.trim()) {
-        params.set("category", dealCategory.trim()); // if your docs have category
-        params.set("kw", dealCategory.trim());       // fallback: title keyword
-      }
-  
-      const r = await fetch(`${PYAPI_BASE}/deals/by-title?${params.toString()}&t=${Date.now()}`, {
+      const r = await fetch(`${PYAPI_BASE}/deals/by-upc?${params.toString()}&t=${Date.now()}`, {
         headers: { "Cache-Control": "no-cache" },
         cache: "no-store",
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data?.detail || data?.error || "Failed to fetch deals");
-      const arr = Array.isArray(data.deals) ? data.deals : [];
-      setDeals(arr);
-      if (!arr.length) setDealsMsg("No deals yet. Try a broader keyword, or build more Amazon cache.");
+      if (!r.ok) throw new Error(data?.detail || data?.error || "Fetch UPC deals failed");
+      setDeals(data.deals || []);
+      if (!data.deals?.length) setDealsMsg("No UPC-based deals found yet.");
     } catch (e) {
       setDealsMsg(`Error: ${e.message}`);
     } finally {
@@ -365,10 +369,10 @@ export default function Dashboard() {
               />
             </label>
 
-            <button className="secondary" onClick={buildAmazonCacheByTitle} disabled={dealsLoading}>
+            <button className="secondary" onClick={buildAmazonCacheByUPC} disabled={dealsLoading}>
               {dealsLoading ? "Indexing…" : "Build Amazon Cache"}
             </button>
-            <button className="primary" onClick={fetchDeals} disabled={dealsLoading}>
+            <button className="primary" onClick={fetchDealsByUPC} disabled={dealsLoading}>
               {dealsLoading ? "Searching…" : "Find Deals"}
             </button>
           </div>
