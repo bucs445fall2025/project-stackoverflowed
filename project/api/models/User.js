@@ -13,5 +13,5 @@ const userSchema = new mongoose.Schema({
   },
 }, { timestamps: true });
 
-// Create and export the User model to be 
+// Create and export the User model to be used in app.js and userController.js
 module.exports = mongoose.model('User', userSchema);

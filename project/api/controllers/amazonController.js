@@ -1,54 +1,79 @@
-const aws4 = require('aws4');
-const axios = require('axios');
-const https = require('https');
+const aws4 = require('aws4'); // For signing Amazon API reqs
+const axios = require('axios'); // A HTTP client for Node.js, 
+const https = require('https'); // Node.js's native HTTPS module, can be used alonside Axios
 
-let currentAccessToken = null;   // LWA access token (short-lived)
-let refreshToken = null;         // save this in DB later
-let sellerId = null;
-let marketplaceId = null;        // must be module-scoped so other routes can use it
+let currentAccessToken = null; // LWA access token (short-lived)
+let refreshToken = null;       // Used to refresh Access Token. Need save this in DB later
+let sellerId = null;           // The users Amazon account ID
+let marketplaceId = null;      // Defines what geographical market we're working in
 
 
 
-// ---------- LWA STEP 1 ----------
+/*  ---------- LWA STEP 1 ----------
+    Function used to log send the user to Amazon to log in to their FBA account
+
+    ARGS:
+        req = The request from Express. '_' means we're not using it
+        res = The response, used to redirect the browser
+*/
 async function login(_req, res) {
+  // Generates a random "state" string for security reasons. Prevents CSRF attacks
   const state = Math.random().toString(36).slice(2); // store & verify in prod
+  
+  // Creates a set of query params that Amazon expects in the auth URL
   const params = new URLSearchParams({
-    application_id: process.env.SP_APP_ID || '',
-    state,
-    redirect_uri: process.env.AMAZON_REDIRECT_URI || '',
-    version: 'beta'
+    application_id: process.env.SP_APP_ID || '', // Credentials from Amazon. Identifies our app in Seller Central
+    state, // The random string generated above
+    redirect_uri: process.env.AMAZON_REDIRECT_URI || '', // The callback URL Amazon will send the user back to
+    version: 'beta' // API version we're targeting
   });
+
+  // Sends the user's browser to Amazons consent page, with the params we created above
   return res.redirect(`https://sellercentral.amazon.com/apps/authorize/consent?${params.toString()}`);
 }
 
 
 
-// ---------- LWA STEP 2 ----------
+/*  ---------- LWA STEP 2 ----------
+    Function used to define the route that Amazon redirects to after the user 
+    authorizes our app (the same URL in the redirect_uri in Step 1)
+
+    ARGS:
+        req = The request from Express. '_' means we're not using it
+        res = The response, used to redirect the browser
+*/
 async function callback(req, res) {
+  // Extracts values from query parameters in the redirect URL that Amazon sends
   const { spapi_oauth_code, error } = req.query;
+
+  // Error check the parameters we just extracted
   if (error) return res.status(400).send(`Amazon error: ${error}`);
   if (!spapi_oauth_code) return res.status(400).send('No spapi_oauth_code provided');
 
   try {
+    // Building a POST req body for Amazons token endpoint
     const body = new URLSearchParams({
-      grant_type: 'authorization_code',
-      code: spapi_oauth_code,
-      client_id: process.env.AMAZON_CLIENT_ID || '',
-      client_secret: process.env.AMAZON_CLIENT_SECRET || '',
-      redirect_uri: process.env.AMAZON_REDIRECT_URI || ''
+      grant_type: 'authorization_code', // Tells Amazon what kind of OAuth flow we're doing
+      code: spapi_oauth_code, // The temp code amazon gave in the redirect URL
+      client_id: process.env.AMAZON_CLIENT_ID || '', // Our apps credentials for talking to Amazons OAuth server
+      client_secret: process.env.AMAZON_CLIENT_SECRET || '', // Our apps credentials for talking to Amazons OAuth server
+      redirect_uri: process.env.AMAZON_REDIRECT_URI || '' // Must match the URI from step 1
     });
 
+    // Using Axios to make a POST req to Amazons token endpoint
     const tokenRes = await axios.post(
       'https://api.amazon.com/auth/o2/token',
-      body.toString(),
-      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+      body.toString(), // Send the body as a string
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } } // A header specifying content type
     );
 
+    // The tokens Amazon responded with
     currentAccessToken = tokenRes.data.access_token;
     refreshToken = tokenRes.data.refresh_token;
 
+    // Sets a variable queal to where to redirect the user after log in. 'FRONTEND_URL' Defined as env variable on Railway
     const frontend = process.env.FRONTEND_URL || 'http://localhost:3000';
-    return res.redirect(`${frontend}`);
+    return res.redirect(`${frontend}`); // Use that variable to redirect 
   } catch (err) {
     console.error('Token exchange failed:', err.response?.status, err.response?.data || err.message);
     return res.status(500).send('Error exchanging auth code');

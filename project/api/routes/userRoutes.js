@@ -7,7 +7,7 @@ const router = express.Router();
 const userController = require('../controllers/userController');
 
 /* 
-    Defines a the POST routes at /register and /login on this router that listen for GET reqs.
+    Defines the POST routes at /register and /login on this router that listen for GET reqs.
     When a client sends a POST request to /api/users/register or /login, express will call the 
     corresponding controller function
 */
