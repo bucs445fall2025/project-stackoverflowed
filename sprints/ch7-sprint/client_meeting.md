@@ -2,15 +2,21 @@
 
 ## SRS Section(s)Updated
 
-
+- Interfaces
+  
 ## Requirements Attempted in this Sprint
 
+- Authentication
+  - OAuth and Sessions
 
 ## Requirements complete
 
+- AUthentication
+  - OAuth and Sessions
 
 ## Requirements incomplete
 
+- N/A
 
 ## Requirement Flex Remaining
 
@@ -18,9 +24,12 @@
 
 ## Requirements Attempted in next Sprint
 
+- Authentication Landing Page
+- Security
 
 ## Milestone Status
 
+- Pass
 
 ## Requested Changes
 
