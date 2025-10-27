@@ -6,14 +6,12 @@
   
 ## Requirements Attempted in this Sprint
 
-- Authentication
-  - OAuth and Sessions
+- Gather Products from API
 
 ## Requirements complete
 
-- AUthentication
-  - OAuth and Sessions
-
+- Gather Products from API
+  
 ## Requirements incomplete
 
 - N/A
@@ -24,8 +22,7 @@
 
 ## Requirements Attempted in next Sprint
 
-- Authentication Landing Page
-- Security
+- Product Comparison and UI
 
 ## Milestone Status
 
