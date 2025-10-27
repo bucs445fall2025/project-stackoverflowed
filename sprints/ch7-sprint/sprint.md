@@ -12,8 +12,8 @@
 
 ### SRS Sections Updated
 
-System architecture section (backend service integration)
 Requirements section (updated FRs for API data handling)
+Added new user interface section
 
 ### User Story
 
