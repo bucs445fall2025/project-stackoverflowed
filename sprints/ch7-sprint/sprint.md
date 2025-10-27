@@ -12,7 +12,7 @@
 
 ### SRS Sections Updated
 
-Requirements section (updated FRs for API data handling)
+Requirements section (updated FRs for Product comparison)
 Added new user interface section
 
 ### User Story
