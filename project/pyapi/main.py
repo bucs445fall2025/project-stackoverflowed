@@ -785,7 +785,7 @@ async def deals_by_upc(min_abs:float=5.0,min_pct:float=0.2,limit:int=100):
         pct=diff/amz_price if amz_price>0 else 0
         if diff>=min_abs and pct>=min_pct:
             deals.append({
-                "wm":{"title":wm.get("title"),"price":wm_price,"link":wm.get("link")},
+                "wm":{"title":wm.get("title"),"price":wm_price,"link":wm.get("link"),"thumbnail": wm.get("thumbnail")},
                 "amz":{"title":amz_cache["amz"].get("title"),"price":amz_price,"link":amz_cache["amz"].get("link")},
                 "savings_abs":diff,"savings_pct":pct*100
             })
@@ -839,6 +839,7 @@ async def deals_by_title(
                     "title": wm.get("title"),
                     "price": wm_price,
                     "link": wm.get("link"),
+                    "thumbnail": wm.get("thumbnail"),
                 },
                 "amz": {
                     "title": amz_meta.get("title"),
