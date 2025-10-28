@@ -289,7 +289,12 @@ export default function Dashboard() {
               <div className="wm-card" key={it.product_id || it.key || it._id}>
                 <div className="thumb-wrap">
                   {it.thumbnail ? (
-                    <img src={it.thumbnail} alt={it.title || "thumbnail"} />
+                    <img
+                    src={it.thumbnail}                // or wm.thumbnail
+                    alt={it.title || "thumbnail"}     // or wm.title
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                  />
                   ) : (
                     <div className="no-thumb">No image</div>
                   )}
@@ -412,7 +417,12 @@ export default function Dashboard() {
                 <div className="deal-card" key={`${wm.product_id || amz.asin || wm.link || i}`}>
                   <div className="thumb-wrap">
                     {wm.thumbnail ? (
-                      <img src={wm.thumbnail} alt={wm.title || "thumbnail"} />
+                      <img
+                      src={it.thumbnail}                // or wm.thumbnail
+                      alt={it.title || "thumbnail"}     // or wm.title
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                    />
                     ) : (
                       <div className="no-thumb">No image</div>
                     )}
@@ -457,162 +467,165 @@ export default function Dashboard() {
       </main>
 
       <style jsx>{`
-        .dash-wrap {
-          position: relative;
-          min-height: 100vh;
-          background: linear-gradient(135deg, #360f5a, #1c0333);
-          display: grid;
-          place-items: center;
-          overflow: hidden;
-          padding: 2rem;
-        }
-        .content {
-          position: relative;
-          z-index: 1;
-          width: min(1100px, 100%);
-          display: grid;
-          gap: 1.25rem;
-        }
-        .card,
-        .products-card {
-          background: rgba(255, 255, 255, 0.05);
-          backdrop-filter: blur(10px);
-          border-radius: 16px;
-          box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
-          color: white;
-          padding: 24px;
-        }
-        .title {
-          font-weight: 700;
-          font-size: clamp(2rem, 4vw, 3rem);
-          letter-spacing: 0.5px;
-          margin: 0 0 0.5rem;
-          text-shadow: 0 0 24px rgba(255, 255, 255, 0.2), 0 2px 12px rgba(0, 0, 0, 0.6);
-        }
-        .subtitle { margin: 0.25rem 0 1rem; opacity: 0.9; }
-        .actions {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0.75rem;
-          margin: 1rem 0;
-        }
-        .primary,
-        .secondary {
-          border: none;
-          border-radius: 12px;
-          padding: 12px 16px;
-          font-weight: 700;
-          cursor: pointer;
-          transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
-        }
-        .primary {
-          background: linear-gradient(90deg, #8a2be2, #4b0082);
-          color: #fff;
-        }
-        .secondary {
-          background: rgba(255, 255, 255, 0.12);
-          color: #fff;
-        }
-        .primary:hover,
-        .secondary:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-        }
-        .secondary:disabled,
-        .primary:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-          transform: none;
-          box-shadow: none;
-        }
-        .status { margin-top: 0.5rem; }
-        .error { color: #ffb4b4; white-space: pre-wrap; margin-top: 0.5rem; }
-        .details { margin-top: 1rem; }
-        .details pre { white-space: pre-wrap; }
-        .products-title { font-weight: 700; margin: 0 0 0.5rem; }
+  .dash-wrap {
+    position: relative;
+    min-height: 100vh;
+    background: radial-gradient(1200px 800px at 20% -10%, #4b1d7a 0%, transparent 60%),
+                radial-gradient(1200px 800px at 80% -10%, #2a0c52 0%, transparent 60%),
+                #1c0333;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    padding: 2rem;
+  }
+  .content {
+    position: relative;
+    z-index: 1;
+    width: min(1120px, 100%);
+    display: grid;
+    gap: 1.25rem;
+  }
+  .card,
+  .products-card {
+    background: rgba(22, 16, 34, 0.7);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+    color: #fff;
+    padding: 24px;
+  }
+  .title {
+    font-weight: 700;
+    font-size: clamp(2rem, 4vw, 3rem);
+    letter-spacing: 0.5px;
+    margin: 0 0 0.25rem;
+    text-shadow: 0 1px 12px rgba(0, 0, 0, 0.45);
+  }
+  .subtitle { margin: 0.25rem 0 1rem; opacity: 0.9; }
+  .actions {
+    display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1rem 0;
+  }
+  .primary, .secondary {
+    border: none; border-radius: 12px; padding: 12px 16px;
+    font-weight: 700; cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
+  }
+  .primary { background: linear-gradient(90deg, #8a2be2, #5b21b6); color: #fff; }
+  .secondary { background: rgba(255,255,255,0.12); color: #fff; }
+  .primary:hover, .secondary:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.35); }
+  .secondary:disabled, .primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
+  .status { margin-top: 0.5rem; }
+  .error { color: #ffb4b4; white-space: pre-wrap; margin-top: 0.5rem; }
+  .details { margin-top: 1rem; }
+  .details pre { white-space: pre-wrap; }
+  .products-title { font-weight: 700; margin: 0 0 0.5rem; }
 
-        /* Walmart grid */
-        .grid {
-          margin-top: 1rem;
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-          gap: 12px;
-        }
-        .wm-card {
-          display: grid;
-          grid-template-rows: 160px auto;
-          background: rgba(255,255,255,0.04);
-          border-radius: 12px;
-          overflow: hidden;
-          border: 1px solid rgba(255,255,255,0.06);
-        }
-        .thumb-wrap {
-          background: rgba(0,0,0,0.25);
-          display: grid;
-          place-items: center;
-        }
-        .thumb-wrap img {
-          max-width: 100%;
-          max-height: 100%;
-          object-fit: contain;
-          display: block;
-        }
-        .no-thumb { color: rgba(255,255,255,0.7); font-size: 0.9rem; }
-        .wm-meta { padding: 10px 12px 12px; display: grid; gap: 6px; }
-        .wm-title { color: #fff; text-decoration: none; font-weight: 700; font-size: 0.98rem; line-height: 1.2; }
-        .wm-title:hover { text-decoration: underline; }
-        .wm-row { display: flex; align-items: baseline; gap: 8px; font-size: 0.95rem; opacity: 0.95; }
-        .wm-row.small { font-size: 0.8rem; opacity: 0.8; }
-        .wm-price { font-weight: 800; }
+  /* Walmart grid */
+  .grid {
+    margin-top: 1rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 12px;
+  }
+  .wm-card {
+    display: grid;
+    grid-template-rows: 180px auto;
+    background: rgba(255,255,255,0.04);
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .thumb-wrap {
+    background: #fff;
+    display: grid; place-items: center;
+    padding: 12px;
+  }
+  .thumb-wrap img {
+    width: auto; height: 100%;
+    max-height: 100%;
+    object-fit: contain; display: block;
+  }
+  .no-thumb { color: rgba(0,0,0,0.55); font-size: 0.9rem; }
+  .wm-meta {
+    padding: 10px 12px 12px;
+    display: grid; gap: 6px;
+    background: rgba(13, 15, 26, 0.9);
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .wm-title {
+    color: #fff; text-decoration: none; font-weight: 700; font-size: 0.98rem; line-height: 1.25;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .wm-title:hover { text-decoration: underline; }
+  .wm-row { display: flex; align-items: baseline; gap: 8px; font-size: 0.95rem; opacity: 0.95; }
+  .wm-row.small { font-size: 0.8rem; opacity: 0.8; }
+  .wm-price { font-weight: 800; }
+  .wm-currency { opacity: 0.7; }
 
-        /* Deals grid */
-        .deals-grid {
-          margin-top: 1rem;
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-          gap: 14px;
-        }
-        .deal-card {
-          display: grid;
-          grid-template-rows: 180px auto;
-          background: rgba(255,255,255,0.04);
-          border-radius: 12px;
-          overflow: hidden;
-          border: 1px solid rgba(255,255,255,0.06);
-        }
-        .deal-card .thumb-wrap {
-          position: relative;
-          background: rgba(0,0,0,0.25);
-          display: grid;
-          place-items: center;
-        }
-        .deal-card .thumb-wrap img {
-          max-width: 100%;
-          max-height: 100%;
-          object-fit: contain;
-          display: block;
-        }
-        .badge {
-          position: absolute;
-          top: 10px;
-          left: 10px;
-          background: #22c55e;
-          color: #0b1a0b;
-          font-weight: 800;
-          padding: 6px 10px;
-          border-radius: 999px;
-          font-size: 0.75rem;
-        }
-        .deal-meta { padding: 12px 12px 14px; display: grid; gap: 8px; }
-        .deal-title { color: #fff; text-decoration: none; font-weight: 700; font-size: 1.0rem; line-height: 1.25; }
-        .deal-title:hover { text-decoration: underline; }
-        .row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 0.96rem; opacity: 0.95; }
-        .row.tiny { font-size: 0.8rem; opacity: 0.8; }
-        .label { opacity: 0.85; }
-        .price { font-weight: 800; }
-        .linky { color: #c9f; }
-        .savings { font-weight: 800; color: #8fffbc; }
-      `}</style>
+  /* Deals grid */
+  .deals-grid {
+    margin-top: 1rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+  }
+  .deal-card {
+    display: grid;
+    grid-template-rows: 210px auto;
+    background: rgba(255,255,255,0.04);
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .deal-card .thumb-wrap {
+    position: relative;
+    background: #fff;
+    display: grid; place-items: center;
+    padding: 14px;
+  }
+  .deal-card .thumb-wrap img {
+    width: auto; height: 100%;
+    max-height: 100%;
+    object-fit: contain; display: block;
+  }
+  .badge {
+    position: absolute; top: 10px; left: 10px;
+    background: #22c55e; color: #06260d;
+    font-weight: 800; padding: 6px 10px; border-radius: 999px; font-size: 0.75rem;
+    border: 1px solid rgba(0,0,0,0.15);
+  }
+  .deal-meta {
+    padding: 12px 12px 14px;
+    display: grid; gap: 8px;
+    background: rgba(13, 15, 26, 0.92);
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .deal-title {
+    color: #fff; text-decoration: none; font-weight: 800; font-size: 1rem; line-height: 1.28;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .deal-title:hover { text-decoration: underline; }
+  .row {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+    font-size: 0.96rem;
+  }
+  .label { opacity: 0.8; letter-spacing: 0.02em; }
+  .price { font-weight: 900; }
+  .linky { color: #a78bfa; text-decoration: underline; text-underline-offset: 2px; }
+  .linky:hover { opacity: 0.9; }
+  .savings {
+    font-weight: 900; color: #8fffbc;
+    background: rgba(34, 197, 94, 0.08);
+    border: 1px solid rgba(34, 197, 94, 0.18);
+    padding: 6px 8px; border-radius: 8px;
+    font-size: 0.95rem;
+  }
+  .row.tiny {
+    font-size: 0.8rem; opacity: 0.8;
+    display: flex; justify-content: space-between;
+  }
+`}</style>
 
       <style jsx global>{`
         html, body, #__next { height: 100%; background: #1b0633; }
