@@ -24,20 +24,22 @@ export default function Dashboard() {
   const [checkResult, setCheckResult] = useState(null);
   const [checking, setChecking] = useState(false);
 
+  const COLLECTION_MAP = {
+    "Electronics": "amz_electronics",
+    "Health & Wellness": "amz_health_wellness",
+    "Home & Kitchen": "amz_home_kitchen",
+    "Toys & Games": "amz_toys_games",
+    "Beauty": "amz_beauty",
+    "Grocery": "amz_grocery",
+    "Sports & Outdoors": "amz_sports_outdoors",
+    "Pet Supplies": "amz_pet_supplies",
+  };
+
   // Deals (dropdown only)
   const [deals, setDeals] = useState([]);
   const [dealsLoading, setDealsLoading] = useState(false);
   const [dealsMsg, setDealsMsg] = useState("");
-  const categories = [
-    "Electronics",
-    "Health & Wellness",
-    "Home & Kitchen",
-    "Toys & Games",
-    "Beauty",
-    "Grocery",
-    "Sports & Outdoors",
-    "Pet Supplies",
-  ];
+  const categroyLabels = Object.keys(COLLECTION_MAP);
   const [selectedCategory, setSelectedCategory] = useState("");
 
   // Fallback thumbnail (prevents big blank slabs on bad URLs)
@@ -83,23 +85,23 @@ export default function Dashboard() {
     window.location.href = `${API_BASE}/api/amazon/auth/login`;
   };
 
-  const fetchDealsByCategory = async (category) => {
-    if (!category) return;
+  const fetchDealsByCategory = async (label) => {
+    if (!label) return;
     setDealsLoading(true);
     setDealsMsg("");
     setDeals([]);
-
+  
+    const collection = COLLECTION_MAP[label]; // resolve label → collection
+  
     try {
       const r = await fetch(`${API_BASE}/api/amazon/deals`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category }),
+        body: JSON.stringify({ categoryLabel: label, collection }), // send both
       });
-
       const j = await r.json();
       const list = Array.isArray(j.deals) ? j.deals : [];
       setDeals(list);
-
       if (!list.length) setDealsMsg("No deals yet for this category.");
     } catch (e) {
       setDealsMsg(`Error: ${e.message}`);
@@ -107,6 +109,8 @@ export default function Dashboard() {
       setDealsLoading(false);
     }
   };
+  
+  
 
 
   // When user selects a category, fetch deals immediately
@@ -159,31 +163,43 @@ export default function Dashboard() {
           <h2 className={`${spaceGrotesk.className} products-title`}>Find Deals (Walmart vs Amazon)</h2>
           <p className="subtitle">Choose a category to fetch example deals.</p>
 
-          <div className="actions" style={{ alignItems: "center" }}>
-            <label style={{ display: "flex", gap: 8, alignItems: "center", color: "#fff" }}>
-              Category:
-              <select
-                value={selectedCategory}
-                onChange={onCategoryChange}
+          <div className="card">
+            <h2 className={`${spaceGrotesk.className} products-title`}>Find Deals (Walmart vs Amazon)</h2>
+            <p className="subtitle">Choose a category to fetch example deals.</p>
+
+            <div className="actions" style={{ alignItems: "center" }}>
+              <label
                 style={{
-                  padding: "10px 12px",
-                  borderRadius: 8,
-                  border: "1px solid rgba(255,255,255,0.2)",
-                  background: "rgba(255,255,255,0.08)",
+                  display: "flex",
+                  gap: 8,
+                  alignItems: "center",
                   color: "#fff",
-                  minWidth: 220,
                 }}
               >
-                <option value="" disabled>
-                  Select a category…
-                </option>
-                {categories.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
+                Category:
+                <select
+                  value={selectedCategory}
+                  onChange={onCategoryChange}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: 8,
+                    border: "1px solid rgba(255,255,255,0.2)",
+                    background: "rgba(255,255,255,0.08)",
+                    color: "#fff",
+                    minWidth: 220,
+                  }}
+                >
+                  <option value="" disabled>
+                    Select a category…
                   </option>
-                ))}
-              </select>
-            </label>
+                  {Object.keys(COLLECTION_MAP).map((label) => (
+                    <option key={label} value={label}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
           </div>
 
           {dealsMsg && <div className="status">{dealsMsg}</div>}

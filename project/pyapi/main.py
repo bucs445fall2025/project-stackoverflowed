@@ -56,6 +56,11 @@ async def _startup_indexes():
 # ──────────────────────────────────────────────────────────────────────────────
 # Utils
 # ──────────────────────────────────────────────────────────────────────────────
+def _get_colls(wm_override: Optional[str], amz_override: Optional[str]):
+    wm = db[wm_override] if wm_override else db[WM_COLL]
+    amz = db[amz_override] if amz_override else db[AMZ_COLL]
+    return wm, amz
+
 def now_utc() -> datetime: return datetime.now(timezone.utc)
 def now_iso() -> str: return now_utc().isoformat()
 PRICE_RE = re.compile(r"(\d+(?:\.\d{1,2})?)")
@@ -772,28 +777,39 @@ async def index_amazon_by_title(req: IndexAmazonByTitleReq):
 # Deals (UPC-first join)
 # ──────────────────────────────────────────────────────────────────────────────
 @app.get("/deals/by-upc")
-async def deals_by_upc(min_abs:float=5.0,min_pct:float=0.2,limit:int=100):
-    wm_items = await db[WM_COLL].find({"upc":{"$exists":True}}).to_list(length=limit*5)
-    deals=[]
+async def deals_by_upc(
+    min_abs: float = 5.0,
+    min_pct: float = 0.2,
+    limit: int = 100,
+    wm_coll: Optional[str] = Query(None),
+    amz_coll: Optional[str] = Query(None),
+):
+    wm_db, amz_db = _get_colls(wm_coll, amz_coll)
+    wm_items = await wm_db.find({"upc": {"$exists": True}}).to_list(length=limit * 5)
+    deals = []
     for wm in wm_items:
-        wm_price=parse_price(wm.get("price"))
-        if not wm_price: continue
-        upc=wm.get("upc")
-        amz_cache=await db[AMZ_COLL].find_one({"key_type":"upc","key_val":upc})
-        if not amz_cache: continue
-        amz_price=parse_price(amz_cache.get("price"))
-        if not amz_price: continue
-        diff=amz_price-wm_price
-        pct=diff/amz_price if amz_price>0 else 0
-        if diff>=min_abs and pct>=min_pct:
+        wm_price = parse_price(wm.get("price"))
+        if not wm_price:
+            continue
+        upc = wm.get("upc")
+        amz_cache = await amz_db.find_one({"key_type": "upc", "key_val": upc})
+        if not amz_cache:
+            continue
+        amz_price = parse_price(amz_cache.get("price"))
+        if not amz_price:
+            continue
+        diff = amz_price - wm_price
+        pct = diff / amz_price if amz_price > 0 else 0
+        if diff >= min_abs and pct >= min_pct:
             deals.append({
-                "wm":{"title":wm.get("title"),"price":wm_price,"link":wm.get("link"),"thumbnail": wm.get("thumbnail")},
-                "amz":{"title":amz_cache["amz"].get("title"),"price":amz_price,"link":amz_cache["amz"].get("link")},
-                "savings_abs":diff,"savings_pct":pct*100
+                "wm": {"title": wm.get("title"), "price": wm_price, "link": wm.get("link"), "thumbnail": wm.get("thumbnail")},
+                "amz": {"title": amz_cache["amz"].get("title"), "price": amz_price, "link": amz_cache["amz"].get("link")},
+                "savings_abs": diff, "savings_pct": pct * 100
             })
-        if len(deals)>=limit: break
-    deals.sort(key=lambda d:d["savings_abs"],reverse=True)
-    return {"count":len(deals),"deals":deals[:limit]}
+        if len(deals) >= limit:
+            break
+    deals.sort(key=lambda d: d["savings_abs"], reverse=True)
+    return {"count": len(deals), "deals": deals[:limit]}
 
 @app.get("/deals/by-title")
 async def deals_by_title(
@@ -801,60 +817,36 @@ async def deals_by_title(
     min_pct: float = 0.20,
     min_sim: int = 86,
     limit: int = 100,
+    wm_coll: Optional[str] = Query(None),
+    amz_coll: Optional[str] = Query(None),
 ):
-    """
-    Join Walmart items with cached Amazon offers (by fuzzy title).
-    Only count as a deal if:
-      - Amazon match_score_sim >= min_sim
-      - Amazon price > Walmart price
-      - Savings exceed thresholds
-    """
-    wm_items = await db[WM_COLL].find({}).to_list(length=limit * 5)
+    wm_db, amz_db = _get_colls(wm_coll, amz_coll)
+    wm_items = await wm_db.find({}).to_list(length=limit * 5)
     deals = []
-
     for wm in wm_items:
         wm_price = parse_price(wm.get("price"))
         if not wm_price:
             continue
-
         pid = str(wm.get("product_id") or "")
         if not pid:
             continue
-
-        amz_cache = await db[AMZ_COLL].find_one({"key_type": "wm_pid", "key_val": pid})
+        amz_cache = await amz_db.find_one({"key_type": "wm_pid", "key_val": pid})
         if not amz_cache:
             continue
-
         amz_price = parse_price(amz_cache.get("price"))
-        amz_meta  = amz_cache.get("amz") or {}
+        amz_meta = amz_cache.get("amz") or {}
         sim_score = amz_meta.get("match_score_sim") or 0
-
         if not amz_price or sim_score < min_sim:
             continue
-
         diff = amz_price - wm_price
         pct = diff / amz_price if amz_price > 0 else 0
-
         if diff >= min_abs and pct >= min_pct:
             deals.append({
-                "wm": {
-                    "title": wm.get("title"),
-                    "price": wm_price,
-                    "link": wm.get("link"),
-                    "thumbnail": wm.get("thumbnail"),
-                },
-                "amz": {
-                    "title": amz_meta.get("title"),
-                    "price": amz_price,
-                    "link": amz_meta.get("link"),
-                    "sim": sim_score,
-                },
-                "savings_abs": diff,
-                "savings_pct": round(pct * 100, 2),
+                "wm": {"title": wm.get("title"), "price": wm_price, "link": wm.get("link"), "thumbnail": wm.get("thumbnail")},
+                "amz": {"title": amz_meta.get("title"), "price": amz_price, "link": amz_meta.get("link"), "sim": sim_score},
+                "savings_abs": diff, "savings_pct": round(pct * 100, 2),
             })
-
         if len(deals) >= limit:
             break
-
     deals.sort(key=lambda d: d["savings_abs"], reverse=True)
     return {"count": len(deals), "deals": deals[:limit]}

@@ -6,6 +6,17 @@ const router = express.Router();
 // Imports all exported functions from amazonController. They handle the logic at a certain route
 const amazonController = require('../controllers/amazonController');
 
+const COLLECTION_MAP = {
+  "Electronics": "amz_electronics",
+  "Health & Wellness": "amz_health_wellness",
+  "Home & Kitchen": "amz_home_kitchen",
+  "Toys & Games": "amz_toys_games",
+  "Beauty": "amz_beauty",
+  "Grocery": "amz_grocery",
+  "Sports & Outdoors": "amz_sports_outdoors",
+  "Pet Supplies": "amz_pet_supplies",
+};
+
 /* 
     Defines the POST routes that listen for GET reqs.
     When a client sends a POST request to /api/users/register or /login, express will call the 
@@ -17,6 +28,8 @@ router.get('/auth/login', amazonController.login);
 router.get('/auth/callback', amazonController.callback);
 router.get('/spapi/sandbox-check', amazonController.sandboxCheck);
 router.get('/spapi/products', amazonController.sandboxCheck);
+
+
 
 // Exports the router so it can be imported into app.js
 module.exports = router;
@@ -49,33 +62,28 @@ router.post("/amazon/scrape-category", async (req, res) => {
     }
   });
 
-  router.post('/deals', async (req, res) => {
-  try {
-    const { category = '' } = req.body || {};
-    if (!category) {
-      return res.status(400).json({ error: 'category is required' });
+  router.post("/deals", async (req, res) => {
+    try {
+      const { categoryLabel, collection } = req.body || {};
+      const resolved = COLLECTION_MAP[categoryLabel];
+  
+      // do not trust client-provided "collection"; use our map
+      const coll = resolved || null;
+      if (!coll) {
+        return res.status(400).json({ error: "Unknown category label" });
+      }
+  
+      // forward to PyAPI with a query override, e.g. ?amz_coll=amz_electronics
+      const url = `${process.env.PYAPI_URL}/deals/by-title?amz_coll=${encodeURIComponent(coll)}&min_abs=5&min_pct=0.2&min_sim=86&limit=120`;
+      const r = await fetch(url, { headers: { "Cache-Control": "no-cache" } });
+  
+      // always return JSON to the client
+      const ct = r.headers.get("content-type") || "";
+      const payload = ct.includes("application/json") ? await r.json() : { error: await r.text() };
+  
+      res.status(r.status).json(payload);
+    } catch (err) {
+      console.error("Proxy error (/api/amazon/deals):", err);
+      res.status(500).json({ error: "Proxy to pyapi failed" });
     }
-
-    // Forward only category; let PYAPI use defaults for min_pct/min_abs/limit/min_sim
-    const qs = new URLSearchParams({ category });
-
-    // UPC-based deals
-    const upcRes = await fetch(`${PYAPI_URL}/deals/by-upc?${qs.toString()}`, {
-      headers: { 'Cache-Control': 'no-cache' },
-    });
-    const upcJson = await upcRes.json();
-    const upcDeals = Array.isArray(upcJson.deals) ? upcJson.deals : [];
-
-    // Title-based deals
-    const titleRes = await fetch(`${PYAPI_URL}/deals/by-title?${qs.toString()}`, {
-      headers: { 'Cache-Control': 'no-cache' },
-    });
-    const titleJson = await titleRes.json();
-    const titleDeals = Array.isArray(titleJson.deals) ? titleJson.deals : [];
-
-    res.status(200).json({ deals: [...upcDeals, ...titleDeals] });
-  } catch (err) {
-    console.error('Proxy error (combined deals):', err);
-    res.status(500).json({ error: 'Failed to fetch deals' });
-  }
-});
+  });
