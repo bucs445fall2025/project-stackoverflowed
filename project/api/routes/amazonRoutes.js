@@ -49,18 +49,6 @@ router.post("/amazon/scrape-category", async (req, res) => {
     }
   });
 
-  router.get("/deals-by-upc", async (req, res) => {
-    try {
-      const qs = new URLSearchParams(req.query).toString();
-      const r = await fetch(`${process.env.PYAPI_URL}/deals/by-upc?${qs}`, { headers: { "Cache-Control": "no-cache" }});
-      const data = await r.json();
-      res.set("Cache-Control", "no-store");
-      res.status(r.status).json(data);
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
   router.post("/deals", async (req, res) => {
     try {
       const { category, min_pct = 0.2, min_abs = 5, limit = 200, min_sim = 90 } = req.body || {};
