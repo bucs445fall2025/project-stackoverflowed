@@ -8,11 +8,6 @@ const API_BASE =
   process.env.NEXT_PUBLIC_BACKEND_URL ||
   "https://feisty-renewal-production.up.railway.app";
 
-// FastAPI base for deals/scrape (kept for parity even if unused here)
-const PYAPI_BASE =
-  process.env.NEXT_PUBLIC_PYAPI_URL ||
-  "https://diligent-spontaneity-production-d286.up.railway.app";
-
 // Load StarsBackground only on client
 const StarsBackground = dynamic(() => import("../components/StarsBackground"), {
   ssr: false,

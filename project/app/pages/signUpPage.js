@@ -4,6 +4,10 @@ import { useRouter } from "next/router";
 import dynamic from "next/dynamic";
 import { Space_Grotesk } from "next/font/google";
 
+const API_BASE =
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  "https://feisty-renewal-production.up.railway.app";
+
 // Client-only load for the canvas background
 const StarsBackground = dynamic(() => import("../components/StarsBackground"), {
   ssr: false,
@@ -40,7 +44,7 @@ export default function Signup() {
 
     try {
       const response = await fetch(
-        "https://feisty-renewal-production.up.railway.app/api/users/register",
+        `${API_BASE}/api/users/register`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

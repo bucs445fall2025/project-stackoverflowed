@@ -1,7 +1,9 @@
 // components/Products.jsx
 import { useEffect, useState } from 'react';
 
-const API_BASE = 'https://feisty-renewal-production.up.railway.app';
+const API_BASE =
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  "https://feisty-renewal-production.up.railway.app";
 
 export default function Products() {
   const [loading, setLoading] = useState(true);

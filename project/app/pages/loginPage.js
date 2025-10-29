@@ -3,6 +3,10 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
 import dynamic from "next/dynamic";
 
+const API_BASE =
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  "https://feisty-renewal-production.up.railway.app";
+
 // Load the canvas only in the browser (avoids SSR crashes)
 const StarsBackground = dynamic(() => import("../components/StarsBackground"), {
   ssr: false,
@@ -58,7 +62,7 @@ export default function LoginPage() {
     setError(false);
     try {
       const res = await fetch(
-        "https://feisty-renewal-production.up.railway.app/api/users/login",
+        `${API_BASE}/api/users/login`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
