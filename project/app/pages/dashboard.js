@@ -24,23 +24,21 @@ export default function Dashboard() {
   const [checkResult, setCheckResult] = useState(null);
   const [checking, setChecking] = useState(false);
 
-  // Walmart states
-  const [wmItems, setWmItems] = useState([]);
-  const [wmLoading, setWmLoading] = useState(false);
-  const [wmIngesting, setWmIngesting] = useState(false);
-  const [wmMsg, setWmMsg] = useState("");
-
-  // Deals (Walmart vs Amazon, title/brand)
+  // Deals (dropdown only)
   const [deals, setDeals] = useState([]);
   const [dealsLoading, setDealsLoading] = useState(false);
   const [dealsMsg, setDealsMsg] = useState("");
-
-  // Filters
-  const [dealCategory, setDealCategory] = useState("");
-  const [dealMinPct, setDealMinPct] = useState(0.2); // 20%
-  const [dealMinAbs, setDealMinAbs] = useState(5);
-  const [dealLimit, setDealLimit] = useState(200);
-  const [dealMinScore, setDealMinScore] = useState(0.62); // title match score
+  const categories = [
+    "Electronics",
+    "Health & Wellness",
+    "Home & Kitchen",
+    "Toys & Games",
+    "Beauty",
+    "Grocery",
+    "Sports & Outdoors",
+    "Pet Supplies",
+  ];
+  const [selectedCategory, setSelectedCategory] = useState("");
 
   // Fallback thumbnail (prevents big blank slabs on bad URLs)
   const FALLBACK_SVG =
@@ -85,109 +83,24 @@ export default function Dashboard() {
     window.location.href = `${API_BASE}/api/amazon/auth/login`;
   };
 
-  const scrapeWalmartCategory = async (categoryKey, query) => {
-    const r = await fetch(`${API_BASE}/api/amazon/walmart/scrape-category`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ category_key: categoryKey, query, pages: 1 }),
-    });
-    return r.json();
-  };
-
-  const scrapeAmazonCategory = async (categoryKey, query) => {
-    const r = await fetch(`${API_BASE}/api/amazon/scrape-category`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ category_key: categoryKey, query, pages: 1 }),
-    });
-    return r.json();
-  };
-
-  // Walmart: ingest via Node proxy -> pyapi
-  const ingestWalmart = async () => {
-    setWmIngesting(true);
-    setWmMsg("");
-    try {
-      const body = { query: "protein powder", pages: 1, max_products: 80, delay_ms: 700 };
-      const r = await fetch(`${API_BASE}/api/amazon/walmart/scrape?t=${Date.now()}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Cache-Control": "no-cache" },
-        cache: "no-store",
-        body: JSON.stringify(body),
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data?.detail || data?.error || "Ingestion failed");
-      setWmMsg(`Ingested ${data.inserted} new / ${data.updated} updated (processed ${data.total_processed})`);
-      const e = await enrichUPC(200);
-      setWmMsg((prev) => `${prev} | UPCs: considered ${e.considered ?? "?"}, updated ${e.updated ?? "0"}`);
-      await fetchWalmartItems();
-    } catch (e) {
-      setWmMsg(`Error: ${e.message}`);
-    } finally {
-      setWmIngesting(false);
-    }
-  };
-
-  async function enrichUPC(limit = 200) {
-    const r = await fetch(`${API_BASE}/api/amazon/walmart/enrich-upc?limit=${limit}`, {
-      method: "POST",
-      headers: { "Cache-Control": "no-cache" },
-      cache: "no-store",
-    });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data?.detail || data?.error || "UPC enrich failed");
-    return data;
-  }
-
-  // Walmart: fetch items
-  const fetchWalmartItems = async () => {
-    setWmLoading(true);
-    setWmMsg("");
-    try {
-      const r = await fetch(`${API_BASE}/api/amazon/walmart/items?limit=30&t=${Date.now()}`, {
-        headers: { "Cache-Control": "no-cache" },
-        cache: "no-store",
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data?.error || "Failed to load items");
-      setWmItems(Array.isArray(data.items) ? data.items : []);
-      if (!Array.isArray(data.items) || data.items.length === 0) {
-        setWmMsg("No items found yet. Try 'Ingest Walmart (SerpAPI)'.");
-      }
-    } catch (e) {
-      setWmMsg(`Error: ${e.message}`);
-    } finally {
-      setWmLoading(false);
-    }
-  };
-
-  // Build Amazon cache by title/brand
-  const buildAmazonCache = async () => {
-    setDealsMsg("");
+  const fetchDealsByCategory = async (category) => {
+    if (!category) return;
     setDealsLoading(true);
+    setDealsMsg("");
+    setDeals([]);
+
     try {
-      // 1) UPC-first
-      const r1 = await fetch(`${API_BASE}/api/amazon/index-upc`, {
+      const r = await fetch(`${API_BASE}/api/amazon/deals`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Cache-Control": "no-cache" },
-        cache: "no-store",
-        body: JSON.stringify({ limit: 300, recache_hours: 24 }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category }),
       });
-      const j1 = await r1.json();
-      if (!r1.ok) throw new Error(j1?.detail || j1?.error || "UPC index failed");
 
-      // 2) strict title fallback (kept as-is to not change behavior)
-      const r2 = await fetch(`${API_BASE}/api/amazon/index-by-title?t=${Date.now()}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Cache-Control": "no-cache" },
-        cache: "no-store",
-        body: JSON.stringify({ limit_items: 120, max_serp_calls: 60, min_score: 0.80, recache_hours: 24 }),
-      });
-      const j2 = await r2.json();
+      const j = await r.json();
+      const list = Array.isArray(j.deals) ? j.deals : [];
+      setDeals(list);
 
-      setDealsMsg(
-        `Amazon cache → UPC fetched: ${j1.fetched ?? 0} (misses ${j1.misses ?? 0}); Title fetched: ${j2.fetched_now ?? 0} (misses ${j2.misses ?? 0})`
-      );
+      if (!list.length) setDealsMsg("No deals yet for this category.");
     } catch (e) {
       setDealsMsg(`Error: ${e.message}`);
     } finally {
@@ -195,43 +108,12 @@ export default function Dashboard() {
     }
   };
 
-  // Fetch deals (title/brand match)
-  const fetchDeals = async () => {
-    setDealsLoading(true);
-    setDealsMsg("");
-    try {
-      const qs = new URLSearchParams({
-        min_pct: String(dealMinPct),
-        min_abs: String(dealMinAbs),
-        limit: String(Math.max(dealLimit, 100)),
-      });
 
-      const upcR = await fetch(`${API_BASE}/api/amazon/deals-by-upc?${qs.toString()}&t=${Date.now()}`, {
-        headers: { "Cache-Control": "no-cache" },
-        cache: "no-store",
-      });
-      const upcJ = await upcR.json();
-      const upcDeals = Array.isArray(upcJ.deals) ? upcJ.deals : [];
-
-      // Strict title fallback (kept as-is)
-      const titleR = await fetch(
-            `${API_BASE}/api/amazon/deals/by-title?${qs.toString()}&min_sim=${Math.round(dealMinScore * 100)}&t=${Date.now()}`,
-        {
-          headers: { "Cache-Control": "no-cache" },
-          cache: "no-store",
-        }
-      );
-      const titleJ = await titleR.json();
-      const titleDeals = Array.isArray(titleJ.deals) ? titleJ.deals : [];
-
-      const merged = [...upcDeals, ...titleDeals];
-      setDeals(merged);
-      if (!merged.length) setDealsMsg("No deals yet. Try a broader scrape, or build more Amazon cache.");
-    } catch (e) {
-      setDealsMsg(`Error: ${e.message}`);
-    } finally {
-      setDealsLoading(false);
-    }
+  // When user selects a category, fetch deals immediately
+  const onCategoryChange = (e) => {
+    const cat = e.target.value;
+    setSelectedCategory(cat);
+    fetchDealsByCategory(cat);
   };
 
   return (
@@ -272,170 +154,36 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Walmart Inventory Card */}
-        <div className="card">
-          <h2 className={`${spaceGrotesk.className} products-title`}>Walmart Inventory (SerpAPI → Mongo)</h2>
-          <p className="subtitle">Ingest from SerpAPI and view items we’ve stored in MongoDB.</p>
-
-          <div className="actions">
-            <button className="primary" onClick={ingestWalmart} disabled={wmIngesting}>
-              {wmIngesting ? "Ingesting…" : "Ingest Walmart (SerpAPI)"}
-            </button>
-            <button className="secondary" onClick={fetchWalmartItems} disabled={wmLoading}>
-              {wmLoading ? "Loading…" : "Refresh Items"}
-            </button>
-          </div>
-
-          {wmMsg && <div className="status">{wmMsg}</div>}
-
-          <div className="grid">
-            {wmItems.map((it) => (
-              <div className="wm-card" key={it.product_id || it.key || it._id}>
-                <div className="thumb-wrap">
-                  <img
-                    src={it.thumbnail || FALLBACK_SVG}
-                    alt={it.title || "thumbnail"}
-                    loading="lazy"
-                    referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      e.currentTarget.src = FALLBACK_SVG;
-                    }}
-                  />
-                </div>
-                <div className="wm-meta">
-                  <a className="wm-title" href={it.link || "#"} target="_blank" rel="noreferrer" title={it.title}>
-                    {it.title || "Untitled"}
-                  </a>
-                  <div className="wm-row">
-                    <span className="wm-price">
-                      {typeof it.price === "number" ? `$${it.price.toFixed(2)}` : it.price || "—"}
-                    </span>
-                    <span className="wm-currency">{it.currency || ""}</span>
-                  </div>
-                  <div className="wm-row">
-                    <span className="wm-rating">{it.rating ? `★ ${it.rating}` : "No rating"}</span>
-                    <span className="wm-reviews">{it.reviews ? `(${it.reviews} reviews)` : ""}</span>
-                  </div>
-                  <div className="wm-row small">
-                    <span>{it.brand || it.seller || it.source || ""}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {wmItems.length === 0 && !wmLoading && <p className="subtitle">Nothing to show yet.</p>}
-        </div>
-
-        {/* Deals finder (Title/Brand) */}
+        {/* Deals finder (Dropdown only) */}
         <div className="card">
           <h2 className={`${spaceGrotesk.className} products-title`}>Find Deals (Walmart vs Amazon)</h2>
-          <p className="subtitle">
-            Walmart items cheaper than Amazon by your thresholds. Build the Amazon cache first, then find deals.
-          </p>
+          <p className="subtitle">Choose a category to fetch example deals.</p>
 
-          {/* Filters */}
           <div className="actions" style={{ alignItems: "center" }}>
             <label style={{ display: "flex", gap: 8, alignItems: "center", color: "#fff" }}>
               Category:
-              <input
-                value={dealCategory}
-                onChange={(e) => setDealCategory(e.target.value)}
-                placeholder="optional (e.g., Electronics)"
+              <select
+                value={selectedCategory}
+                onChange={onCategoryChange}
                 style={{
-                  padding: "8px 10px",
+                  padding: "10px 12px",
                   borderRadius: 8,
                   border: "1px solid rgba(255,255,255,0.2)",
                   background: "rgba(255,255,255,0.08)",
                   color: "#fff",
+                  minWidth: 220,
                 }}
-              />
+              >
+                <option value="" disabled>
+                  Select a category…
+                </option>
+                {categories.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
             </label>
-
-            <label style={{ display: "flex", gap: 8, alignItems: "center", color: "#fff" }}>
-              Min %:
-              <input
-                type="number"
-                step="0.05"
-                min="0"
-                value={dealMinPct}
-                onChange={(e) => setDealMinPct(parseFloat(e.target.value || "0"))}
-                style={{
-                  width: 90,
-                  padding: "8px 10px",
-                  borderRadius: 8,
-                  border: "1px solid rgba(255,255,255,0.2)",
-                  background: "rgba(255,255,255,0.08)",
-                  color: "#fff",
-                }}
-              />
-            </label>
-
-            <label style={{ display: "flex", gap: 8, alignItems: "center", color: "#fff" }}>
-              Min $:
-              <input
-                type="number"
-                step="1"
-                min="0"
-                value={dealMinAbs}
-                onChange={(e) => setDealMinAbs(parseFloat(e.target.value || "0"))}
-                style={{
-                  width: 90,
-                  padding: "8px 10px",
-                  borderRadius: 8,
-                  border: "1px solid rgba(255,255,255,0.2)",
-                  background: "rgba(255,255,255,0.08)",
-                  color: "#fff",
-                }}
-              />
-            </label>
-
-            <label style={{ display: "flex", gap: 8, alignItems: "center", color: "#fff" }}>
-              Min score:
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                max="1"
-                value={dealMinScore}
-                onChange={(e) => setDealMinScore(parseFloat(e.target.value || "0.62"))}
-                style={{
-                  width: 90,
-                  padding: "8px 10px",
-                  borderRadius: 8,
-                  border: "1px solid rgba(255,255,255,0.2)",
-                  background: "rgba(255,255,255,0.08)",
-                  color: "#fff",
-                }}
-              />
-            </label>
-
-            <label style={{ display: "flex", gap: 8, alignItems: "center", color: "#fff" }}>
-              Limit:
-              <input
-                type="number"
-                step="1"
-                min="1"
-                max="200"
-                value={dealLimit}
-                onChange={(e) => setDealLimit(parseInt(e.target.value || "24", 10))}
-                style={{
-                  width: 90,
-                  padding: "8px 10px",
-                  borderRadius: 8,
-                  border: "1px solid rgba(255,255,255,0.2)",
-                  background: "rgba(255,255,255,0.08)",
-                  color: "#fff",
-                }}
-              />
-            </label>
-
-            <button className="secondary" onClick={buildAmazonCache} disabled={dealsLoading}>
-              {dealsLoading ? "Indexing…" : "Build Amazon Cache"}
-            </button>
-            <button className="primary" onClick={fetchDeals} disabled={dealsLoading}>
-              {dealsLoading ? "Searching…" : "Find Deals"}
-            </button>
           </div>
 
           {dealsMsg && <div className="status">{dealsMsg}</div>}
@@ -481,7 +229,7 @@ export default function Dashboard() {
 
                     <div className="row tiny">
                       <span>ASIN: {amz.asin || "—"}</span>
-                      <span>Category: {wm.category || "—"}</span>
+                      <span>Category: {wm.category || selectedCategory || "—"}</span>
                     </div>
                     <div className="row tiny">
                       <span>Match: {amz.match_score != null ? Number(amz.match_score).toFixed(2) : "—"}</span>
@@ -566,7 +314,7 @@ export default function Dashboard() {
         }
         .secondary {
           background: rgba(255, 255, 255, 0.12);
-          color: #fff;
+          color: #fff.
         }
         .primary:hover,
         .secondary:hover {
@@ -599,82 +347,15 @@ export default function Dashboard() {
           margin: 0 0 0.5rem;
         }
 
-        /* Responsive filter labels on small screens */
+        /* Responsive dropdown on small screens */
         @media (max-width: 860px) {
           .actions label {
             flex-direction: column;
             align-items: flex-start !important;
           }
-          .actions input {
-            width: 180px !important;
+          .actions select {
+            width: 220px !important;
           }
-        }
-
-        /* Walmart grid */
-        .grid {
-          margin-top: 1rem;
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-          gap: 12px;
-        }
-        .wm-card {
-          display: grid;
-          grid-template-rows: 160px auto;
-          background: rgba(255, 255, 255, 0.04);
-          border-radius: 12px;
-          overflow: hidden;
-          border: 1px solid var(--panel-border);
-        }
-        .thumb-wrap {
-          background: #fff;
-          display: grid;
-          place-items: center;
-          padding: 10px;
-        }
-        .thumb-wrap img {
-          max-width: 100%;
-          max-height: 140px;
-          object-fit: contain;
-          display: block;
-        }
-        .wm-meta {
-          padding: 10px 12px 12px;
-          display: grid;
-          gap: 6px;
-          background: var(--panel-bg);
-          border-top: 1px solid var(--panel-border);
-          min-height: 110px;
-        }
-        .wm-title {
-          color: #fff;
-          text-decoration: none;
-          font-weight: 700;
-          font-size: 0.98rem;
-          line-height: 1.25;
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-        }
-        .wm-title:hover {
-          text-decoration: underline;
-        }
-        .wm-row {
-          display: flex;
-          align-items: baseline;
-          gap: 8px;
-          font-size: 0.95rem;
-          opacity: 0.95;
-        }
-        .wm-row.small {
-          font-size: 0.8rem;
-          color: var(--muted);
-        }
-        .wm-price {
-          font-weight: 800;
-        }
-        .wm-currency {
-          opacity: 0.7;
         }
 
         /* Deals grid */
