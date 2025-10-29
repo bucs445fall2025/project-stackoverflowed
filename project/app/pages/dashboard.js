@@ -25,14 +25,14 @@ export default function Dashboard() {
   const [checking, setChecking] = useState(false);
 
   const COLLECTION_MAP = {
-    "Electronics": "amz_electronics",
-    "Health & Wellness": "amz_health_wellness",
-    "Home & Kitchen": "amz_home_kitchen",
-    "Toys & Games": "amz_toys_games",
-    "Beauty": "amz_beauty",
-    "Grocery": "amz_grocery",
-    "Sports & Outdoors": "amz_sports_outdoors",
-    "Pet Supplies": "amz_pet_supplies",
+    "Electronics": "electronics",
+    "Health & Wellness": "health_wellness",
+    "Home & Kitchen": "home_kitchen",
+    "Toys & Games": "toys_games",
+    "Beauty": "beauty",
+    "Grocery": "grocery",
+    "Sports & Outdoors": "sports_outdoors",
+    "Pet Supplies": "pet_supplies",
   };
 
   // Deals (dropdown only)
@@ -97,7 +97,7 @@ export default function Dashboard() {
       const r = await fetch(`${API_BASE}/api/amazon/deals`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category: label })
+        body: JSON.stringify({ collection })
       });
       const j = await r.json();
       const list = Array.isArray(j.deals) ? j.deals : [];
