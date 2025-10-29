@@ -51,6 +51,8 @@ async def _startup_indexes():
     await db[AMZ_COLL].create_index([("key_type",1),("key_val",1)], unique=True)
     await db[AMZ_COLL].create_index([("checked_at",-1)])
 
+    
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Utils
 # ──────────────────────────────────────────────────────────────────────────────

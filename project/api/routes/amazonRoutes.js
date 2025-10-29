@@ -60,3 +60,38 @@ router.post("/amazon/scrape-category", async (req, res) => {
       res.status(500).json({ error: err.message });
     }
   });
+
+  router.post("/deals", async (req, res) => {
+    try {
+      const { category, min_pct = 0.2, min_abs = 5, limit = 200, min_sim = 90 } = req.body || {};
+      const qs = new URLSearchParams({
+        min_pct: String(min_pct),
+        min_abs: String(min_abs),
+        limit: String(limit),
+        category: category || "",
+      });
+  
+      // UPC-based deals
+      const upcRes = await fetch(`${process.env.PYAPI_URL}/deals/by-upc?${qs.toString()}`, {
+        headers: { "Cache-Control": "no-cache" },
+      });
+      const upcJson = await upcRes.json();
+      const upcDeals = Array.isArray(upcJson.deals) ? upcJson.deals : [];
+  
+      // Title-based deals
+      const qs2 = new URLSearchParams(qs);
+      qs2.set("min_sim", String(min_sim));
+      const titleRes = await fetch(`${process.env.PYAPI_URL}/deals/by-title?${qs2.toString()}`, {
+        headers: { "Cache-Control": "no-cache" },
+      });
+      const titleJson = await titleRes.json();
+      const titleDeals = Array.isArray(titleJson.deals) ? titleJson.deals : [];
+  
+      // Merge results
+      const deals = [...upcDeals, ...titleDeals];
+      res.status(200).json({ deals });
+    } catch (err) {
+      console.error("Proxy error (combined deals):", err);
+      res.status(500).json({ error: "Failed to fetch deals" });
+    }
+  });
