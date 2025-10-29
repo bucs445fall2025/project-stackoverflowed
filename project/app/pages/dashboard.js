@@ -44,7 +44,7 @@ export default function Dashboard() {
   const [dealCategory, setDealCategory] = useState("");
   const [dealMinPct, setDealMinPct] = useState(0.2); // 20%
   const [dealMinAbs, setDealMinAbs] = useState(5);
-  const [dealLimit, setDealLimit] = useState(24);
+  const [dealLimit, setDealLimit] = useState(200);
   const [dealMinScore, setDealMinScore] = useState(0.62); // title match score
 
   // Fallback thumbnail (prevents big blank slabs on bad URLs)
@@ -208,7 +208,7 @@ export default function Dashboard() {
       const qs = new URLSearchParams({
         min_pct: String(dealMinPct),
         min_abs: String(dealMinAbs),
-        limit: String(dealLimit),
+        limit: String(Math.max(dealLimit, 100)),
       });
 
       const upcR = await fetch(`${API_BASE}/api/amazon/deals-by-upc?${qs.toString()}&t=${Date.now()}`, {
@@ -220,7 +220,7 @@ export default function Dashboard() {
 
       // Strict title fallback (kept as-is)
       const titleR = await fetch(
-        `${API_BASE}/api/amazon/deals/by-title?${qs.toString()}&min_score=0.80&t=${Date.now()}`,
+            `${API_BASE}/api/amazon/deals/by-title?${qs.toString()}&min_sim=${Math.round(dealMinScore * 100)}&t=${Date.now()}`,
         {
           headers: { "Cache-Control": "no-cache" },
           cache: "no-store",
@@ -229,7 +229,7 @@ export default function Dashboard() {
       const titleJ = await titleR.json();
       const titleDeals = Array.isArray(titleJ.deals) ? titleJ.deals : [];
 
-      const merged = [...upcDeals, ...titleDeals].slice(0, dealLimit);
+      const merged = [...upcDeals, ...titleDeals];
       setDeals(merged);
       if (!merged.length) setDealsMsg("No deals yet. Try a broader scrape, or build more Amazon cache.");
     } catch (e) {
