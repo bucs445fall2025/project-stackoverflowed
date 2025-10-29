@@ -23,19 +23,53 @@ async function forwardJsonOrText(upstreamRes) {
     }
   }
 }
+const COLLECTION_MAP = {
+  "Electronics": "amz_electronics",
+  "Health & Wellness": "amz_health_wellness",
+  "Home & Kitchen": "amz_home_kitchen",
+  "Toys & Games": "amz_toys_games",
+  "Beauty": "amz_beauty",
+  "Grocery": "amz_grocery",
+  "Sports & Outdoors": "amz_sports_outdoors",
+  "Pet Supplies": "amz_pet_supplies",
+};
+const slugify = (label) =>
+  label
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '');
+
+const mapLabelToCollections = (label) => {
+  const slug = slugify(label || '');
+  const defaults = { wm_coll: `wm_${slug}`, amz_coll: `amz_${slug}` };
+
+  // Optional hard overrides if any label uses a special collection name:
+  const OVERRIDES = {
+    // 'Electronics': { wm_coll: 'wm_electronics', amz_coll: 'amz_electronics' },
+  };
+  return OVERRIDES[label] || defaults;
+};
 
 
-// POST /api/amazon/walmart/scrape -> proxies to FastAPI /walmart/scrape
 router.post("/walmart/scrape", async (req, res) => {
   try {
-    const r = await fetch(`${process.env.PYAPI_URL}/walmart/scrape`, {
+    const { category = '', ...rest } = req.body || {};
+    if (!category) {
+      return res.status(400).json({ error: "category is required" });
+    }
+
+    const { wm_coll } = mapLabelToCollections(category);
+    const url = `${process.env.PYAPI_URL}/walmart/scrape?${new URLSearchParams({ wm_coll })}`;
+
+    const r = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(req.body),
+      body: JSON.stringify(rest), // keep existing fields: query, pages, max_products, etc.
     });
 
-    // Parse JSON
-    const data = await r.json();
+    const ct = r.headers.get("content-type") || "";
+    const data = ct.includes("application/json") ? await r.json() : { error: await r.text() };
     res.status(r.status).json(data);
   } catch (err) {
     console.error("Proxy error (walmart/scrape):", err);
@@ -43,19 +77,34 @@ router.post("/walmart/scrape", async (req, res) => {
   }
 });
 
+
 //UPC enrichment proxy
-router.post('/walmart/enrich-upc', async (req, res, next) => {
+router.post("/walmart/enrich-upc", async (req, res, next) => {
   try {
+    const { category = '' } = req.body || {};
     const limit = Number(req.query.limit || req.body?.limit || 100);
-    const r = await fetch(`${process.env.PYAPI_URL}/walmart/enrich-upc?limit=${limit}`, {
-      method: 'POST',
+
+    if (!category) {
+      return res.status(400).json({ error: "category is required" });
+    }
+
+    const { wm_coll } = mapLabelToCollections(category);
+    const qs = new URLSearchParams({ limit: String(limit), wm_coll });
+
+    const r = await fetch(`${process.env.PYAPI_URL}/walmart/enrich-upc?${qs.toString()}`, {
+      method: "POST",
     });
-    const data = await r.json().catch(() => ({}));
+
+    const ct = r.headers.get("content-type") || "";
+    const data = ct.includes("application/json") ? await r.json() : { error: await r.text() };
     res.status(r.status).json(data);
-  } catch (e) { next(e); }
+  } catch (e) {
+    next(e);
+  }
 });
 
-// GET /api/amazon/walmart/items -> proxies to FastAPI /walmart/stats
+
+// GET /api/walmart/items -> proxies to FastAPI /walmart/stats
 router.get("/walmart/items", async (req, res) => {
   try {
     const url = `${process.env.PYAPI_URL}/walmart/items?${new URLSearchParams(req.query)}`;
@@ -87,7 +136,7 @@ router.post("/walmart/scrape-category", async (req, res) => {
 
 //Should probably put these routes below in a separate amazon cache file , this is calling amazon serp routes
 
-// POST /api/amazon/index-by-title  -> proxy to PyAPI /amazon/index-by-title
+// POST /api/walmart/index-by-title  -> proxy to PyAPI /amazon/index-by-title
 router.post("/index-by-title", async (req, res) => {
   try {
     const r = await fetch(`${process.env.PYAPI_URL}/amazon/index-by-title`, {
@@ -103,7 +152,7 @@ router.post("/index-by-title", async (req, res) => {
   }
 });
 
-// GET /api/amazon/deals/by-title  -> proxy to PyAPI /deals/by-title
+// GET /api/walmart/deals/by-title  -> proxy to PyAPI /deals/by-title
 router.get("/deals/by-title", async (req, res) => {
   try {
     const url = `${process.env.PYAPI_URL}/deals/by-title?${new URLSearchParams(req.query)}`;

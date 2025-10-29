@@ -16,6 +16,23 @@ const COLLECTION_MAP = {
   "Sports & Outdoors": "amz_sports_outdoors",
   "Pet Supplies": "amz_pet_supplies",
 };
+const slugify = (label) =>
+  label
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '');
+
+const mapLabelToCollections = (label) => {
+  const slug = slugify(label || '');
+  const defaults = { wm_coll: `wm_${slug}`, amz_coll: `amz_${slug}` };
+
+  // Optional hard overrides if any label uses a special collection name:
+  const OVERRIDES = {
+    // 'Electronics': { wm_coll: 'wm_electronics', amz_coll: 'amz_electronics' },
+  };
+  return OVERRIDES[label] || defaults;
+};
 
 /* 
     Defines the POST routes that listen for GET reqs.
@@ -50,7 +67,14 @@ router.post("/amazon/scrape-category", async (req, res) => {
 
   router.post("/index-upc", async (req, res) => {
     try {
-      const r = await fetch(`${process.env.PYAPI_URL}/amazon/index-upc`, {
+      const { category = '' } = req.body || {};
+      if (!category) return res.status(400).json({ error: 'category is required' });
+  
+      const { wm_coll, amz_coll } = mapLabelToCollections(category);
+  
+      const qs = new URLSearchParams({ wm_coll, amz_coll });
+  
+      const r = await fetch(`${process.env.PYAPI_URL}/amazon/index-upc?${qs.toString()}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(req.body),
@@ -62,28 +86,62 @@ router.post("/amazon/scrape-category", async (req, res) => {
     }
   });
 
-  router.post("/deals", async (req, res) => {
+  router.post("/index-by-title", async (req, res) => {
     try {
-      const { categoryLabel, collection } = req.body || {};
-      const resolved = COLLECTION_MAP[categoryLabel];
+      const { category = '' } = req.body || {};
+      if (!category) return res.status(400).json({ error: 'category is required' });
   
-      // do not trust client-provided "collection"; use our map
-      const coll = resolved || null;
-      if (!coll) {
-        return res.status(400).json({ error: "Unknown category label" });
-      }
+      const { wm_coll, amz_coll } = mapLabelToCollections(category);
   
-      // forward to PyAPI with a query override, e.g. ?amz_coll=amz_electronics
-      const url = `${process.env.PYAPI_URL}/deals/by-title?amz_coll=${encodeURIComponent(coll)}&min_abs=5&min_pct=0.2&min_sim=86&limit=120`;
-      const r = await fetch(url, { headers: { "Cache-Control": "no-cache" } });
+      const qs = new URLSearchParams({ wm_coll, amz_coll });
   
-      // always return JSON to the client
-      const ct = r.headers.get("content-type") || "";
-      const payload = ct.includes("application/json") ? await r.json() : { error: await r.text() };
-  
+      const r = await fetch(`${process.env.PYAPI_URL}/amazon/index-by-title?${qs.toString()}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req.body),
+      });
+      const payload = await forwardJsonOrText(r);
       res.status(r.status).json(payload);
     } catch (err) {
-      console.error("Proxy error (/api/amazon/deals):", err);
-      res.status(500).json({ error: "Proxy to pyapi failed" });
+      console.error("Proxy error (index-by-title):", err);
+      res.status(502).json({ error: "Proxy to pyapi failed" });
+    }
+  });
+  
+
+  router.post('/deals', async (req, res) => {
+    try {
+      const { category = '', min_abs, min_pct, min_sim, limit } = req.body || {};
+      if (!category) {
+        return res.status(400).json({ error: 'category is required' });
+      }
+  
+      const { wm_coll, amz_coll } = mapLabelToCollections(category);
+  
+      // Build a base QS with both coll names; add optional thresholds if provided
+      const baseParams = new URLSearchParams({ wm_coll, amz_coll });
+      if (min_abs != null) baseParams.set('min_abs', String(min_abs));
+      if (min_pct != null) baseParams.set('min_pct', String(min_pct));
+      if (min_sim != null) baseParams.set('min_sim', String(min_sim)); // for by-title
+      if (limit    != null) baseParams.set('limit', String(limit));
+  
+      // UPC-based deals
+      const upcRes = await fetch(`${process.env.PYAPI_URL}/deals/by-upc?${baseParams.toString()}`, {
+        headers: { 'Cache-Control': 'no-cache' },
+      });
+      const upcJson = await upcRes.json();
+      const upcDeals = Array.isArray(upcJson.deals) ? upcJson.deals : [];
+  
+      // Title-based deals
+      const titleRes = await fetch(`${process.env.PYAPI_URL}/deals/by-title?${baseParams.toString()}`, {
+        headers: { 'Cache-Control': 'no-cache' },
+      });
+      const titleJson = await titleRes.json();
+      const titleDeals = Array.isArray(titleJson.deals) ? titleJson.deals : [];
+  
+      res.status(200).json({ deals: [...upcDeals, ...titleDeals] });
+    } catch (err) {
+      console.error('Proxy error (combined deals):', err);
+      res.status(500).json({ error: 'Failed to fetch deals' });
     }
   });

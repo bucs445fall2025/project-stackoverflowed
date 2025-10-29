@@ -56,10 +56,14 @@ async def _startup_indexes():
 # ──────────────────────────────────────────────────────────────────────────────
 # Utils
 # ──────────────────────────────────────────────────────────────────────────────
-def _get_colls(wm_override: Optional[str], amz_override: Optional[str]):
-    wm = db[wm_override] if wm_override else db[WM_COLL]
-    amz = db[amz_override] if amz_override else db[AMZ_COLL]
-    return wm, amz
+def _get_colls(wm_coll: Optional[str], amz_coll: Optional[str]):
+    wm_db  = db[wm_coll]  if wm_coll  else db[WM_COLL]
+    amz_db = db[amz_coll] if amz_coll else db[AMZ_COLL]
+    return wm_db, amz_db
+
+def pick_coll(name: Optional[str], fallback_env_name: str):
+    # name: runtime override (e.g., "wm_electronics"), otherwise env default name
+    return db[name] if name else db[fallback_env_name]
 
 def now_utc() -> datetime: return datetime.now(timezone.utc)
 def now_iso() -> str: return now_utc().isoformat()
@@ -246,7 +250,8 @@ class WalmartScrapeReq(BaseModel):
     max_products: int = 100
 
 @app.post("/walmart/scrape")
-async def walmart_scrape(req: WalmartScrapeReq):
+async def walmart_scrape(req: WalmartScrapeReq, wm_coll: Optional[str] = Query(None)):
+    WM = pick_coll(wm_coll, WM_COLL)
     inserted = updated = total = 0
     pages_fetched = 0
     page_errors = 0
@@ -290,7 +295,7 @@ async def walmart_scrape(req: WalmartScrapeReq):
                 "updatedAt": now_utc(),
             }
 
-            res = await db[WM_COLL].update_one(
+            res = await WM.update_one(
                 {"product_id": str(pid)},
                 {"$set": doc, "$setOnInsert": {"createdAt": now_utc()}},
                 upsert=True,
@@ -324,7 +329,8 @@ async def walmart_product_details(product_id: str):
     return data.get("product_result")
 
 @app.post("/walmart/enrich-upc")
-async def walmart_enrich_upc(limit: int = 100):
+async def walmart_enrich_upc(limit: int = 100, wm_coll: Optional[str] = Query(None)):
+    WM = pick_coll(wm_coll, WM_COLL)
     """
     Enrich recent Walmart items by calling walmart_product:
       - Try to set: upc (or gtin), brand, category, link
@@ -341,7 +347,7 @@ async def walmart_enrich_upc(limit: int = 100):
     }
 
     projection = {"_id": 1, "product_id": 1, "upc": 1, "brand": 1, "category": 1, "link": 1}
-    cur = db[WM_COLL].find(filt, projection).sort([("updatedAt", -1)]).limit(limit)
+    cur = WM.find(filt, projection).sort([("updatedAt", -1)]).limit(limit)
     docs = await cur.to_list(length=limit)
 
     upc_set = brand_set = cat_set = link_set = 0
@@ -386,7 +392,7 @@ async def walmart_enrich_upc(limit: int = 100):
 
             if update:
                 update["updatedAt"] = datetime.utcnow()
-                await db[WM_COLL].update_one({"_id": d["_id"]}, {"$set": update})
+                await WM.update_one({"_id": d["_id"]}, {"$set": update})
                 touched += 1
 
         except Exception:
@@ -520,24 +526,36 @@ async def serp_amazon_by_title(title: str, brand: Optional[str], min_accept_scor
 
 
 @app.post("/amazon/index-upc")
-async def index_amazon_by_upc(limit:int=200, recache_hours:int=48):
-    cutoff = datetime.utcnow()-timedelta(hours=recache_hours)
-    cur = db[WM_COLL].find({"upc":{"$exists":True}})
+async def index_amazon_by_upc(
+    limit: int = 200,
+    recache_hours: int = 48,
+    wm_coll: Optional[str] = Query(None),
+    amz_coll: Optional[str] = Query(None),
+):
+    wm_db, amz_db = _get_colls(wm_coll, amz_coll)  # new
+
+    cutoff = datetime.utcnow() - timedelta(hours=recache_hours)
+    cur = wm_db.find({"upc": {"$exists": True}})
     docs = await cur.to_list(length=limit)
-    fetched,misses=0,0
+
+    fetched, misses = 0, 0
     for d in docs:
-        upc = d.get("upc"); pid=d.get("product_id")
-        if not upc: continue
-        cached = await db[AMZ_COLL].find_one(
-            {"key_type":"upc","key_val":upc,"checked_at":{"$gte":cutoff}}
+        upc = d.get("upc")
+        pid = d.get("product_id")
+        if not upc:
+            continue
+        cached = await amz_db.find_one(
+            {"key_type": "upc", "key_val": upc, "checked_at": {"$gte": cutoff}}
         )
-        if cached: continue
+        if cached:
+            continue
         try:
             amz = await serp_amazon_by_upc(upc)
             if not amz:
-                misses+=1; continue
+                misses += 1
+                continue
             doc = {
-                "key_type":"upc","key_val":upc,
+                "key_type": "upc", "key_val": upc,
                 "wm_pid": pid,
                 "amz": {
                     "asin": amz.get("asin"),
@@ -545,13 +563,18 @@ async def index_amazon_by_upc(limit:int=200, recache_hours:int=48):
                     "link": amz.get("link"),
                 },
                 "price": amz.get("price_num"),
-                "checked_at": datetime.utcnow()
+                "checked_at": datetime.utcnow(),
             }
-            await db[AMZ_COLL].update_one({"key_type":"upc","key_val":upc},{"$set":doc},upsert=True)
-            fetched+=1
-        except: misses+=1
+            await amz_db.update_one(
+                {"key_type": "upc", "key_val": upc},
+                {"$set": doc},
+                upsert=True,
+            )
+            fetched += 1
+        except:
+            misses += 1
         await asyncio.sleep(0.4)
-    return {"considered":len(docs),"fetched":fetched,"misses":misses}
+    return {"considered": len(docs), "fetched": fetched, "misses": misses}
 
 
 class IndexAmazonByTitleReq(BaseModel):
@@ -628,15 +651,16 @@ def _pick_best_amz_by_title(
     return best
 
 @app.post("/amazon/index-by-title")
-async def index_amazon_by_title(req: IndexAmazonByTitleReq):
-    """
-    Build/refresh the Amazon cache by fuzzy title/brand for Walmart items using SerpAPI.
-    Caches one Amazon offer per Walmart product_id under key_type="wm_pid".
-    """
+async def index_amazon_by_title(
+    req: IndexAmazonByTitleReq,
+    wm_coll: Optional[str] = Query(None),
+    amz_coll: Optional[str] = Query(None),
+):
     if not SERPAPI_KEY:
         raise HTTPException(500, "SERPAPI_KEY not set")
 
-    # Walmart candidate filter
+    wm_db, amz_db = _get_colls(wm_coll, amz_coll)  # new
+
     match: Dict[str, Any] = {"title": {"$exists": True, "$ne": None}}
     if req.category:
         match["category"] = req.category
@@ -645,11 +669,11 @@ async def index_amazon_by_title(req: IndexAmazonByTitleReq):
 
     cutoff = datetime.utcnow() - timedelta(hours=req.recache_hours)
 
-    # Pull recent Walmart items
-    wm_candidates = await db[WM_COLL].find(
+    wm_candidates = await wm_db.find(
         match,
         {"_id": 0, "product_id": 1, "title": 1, "brand": 1, "price": 1, "updatedAt": 1},
     ).sort([("updatedAt", -1)]).limit(req.limit_items).to_list(req.limit_items)
+
 
     # Filter out those with fresh cache
     to_fetch: List[Dict[str, Any]] = []
@@ -657,7 +681,7 @@ async def index_amazon_by_title(req: IndexAmazonByTitleReq):
         pid = str(it.get("product_id") or "")
         if not pid:
             continue
-        cached = await db[AMZ_COLL].find_one(
+        cached = await amz_db.find_one(
             {"key_type": "wm_pid", "key_val": pid, "checked_at": {"$gte": cutoff}},
             {"_id": 1}
         )
@@ -695,7 +719,7 @@ async def index_amazon_by_title(req: IndexAmazonByTitleReq):
             )
         except HTTPException as e:
             # Record a miss so we don’t hammer the same pid repeatedly
-            await db[AMZ_COLL].update_one(
+            await amz_db.update_one(
                 {"key_type": "wm_pid", "key_val": pid},
                 {"$set": {
                     "key_type": "wm_pid",
@@ -721,7 +745,7 @@ async def index_amazon_by_title(req: IndexAmazonByTitleReq):
 
         if not best:
             # Either truly no result, or all below threshold/brand mismatch
-            await db[AMZ_COLL].update_one(
+            await amz_db.update_one(
                 {"key_type": "wm_pid", "key_val": pid},
                 {"$set": {
                     "key_type": "wm_pid",
@@ -751,7 +775,7 @@ async def index_amazon_by_title(req: IndexAmazonByTitleReq):
                 "last_title": wm_title,
                 "last_brand": wm_brand,
             }
-            await db[AMZ_COLL].update_one(
+            await amz_db.update_one(
                 {"key_type": "wm_pid", "key_val": pid},
                 {"$set": doc},
                 upsert=True,

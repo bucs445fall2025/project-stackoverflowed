@@ -97,7 +97,7 @@ export default function Dashboard() {
       const r = await fetch(`${API_BASE}/api/amazon/deals`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ categoryLabel: label, collection }), // send both
+        body: JSON.stringify({ category: label })
       });
       const j = await r.json();
       const list = Array.isArray(j.deals) ? j.deals : [];
