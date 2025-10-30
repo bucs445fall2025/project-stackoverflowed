@@ -24,25 +24,25 @@ export default function Dashboard() {
   const [checkResult, setCheckResult] = useState(null);
   const [checking, setChecking] = useState(false);
 
-  const COLLECTION_MAP = {
-    "Electronics": "electronics",
-    "Health & Wellness": "health_wellness",
-    "Home & Kitchen": "home_kitchen",
-    "Toys & Games": "toys_games",
-    "Beauty": "beauty",
-    "Grocery": "grocery",
-    "Sports & Outdoors": "sports_outdoors",
-    "Pet Supplies": "pet_supplies",
-  };
+  // Category labels (frontend only; server maps label -> collections)
+  const CATEGORY_LABELS = [
+    "Electronics",
+    "Health & Wellness",
+    "Home & Kitchen",
+    "Toys & Games",
+    "Beauty",
+    "Grocery",
+    "Sports & Outdoors",
+    "Pet Supplies",
+  ];
 
   // Deals (dropdown only)
   const [deals, setDeals] = useState([]);
   const [dealsLoading, setDealsLoading] = useState(false);
   const [dealsMsg, setDealsMsg] = useState("");
-  const categroyLabels = Object.keys(COLLECTION_MAP);
   const [selectedCategory, setSelectedCategory] = useState("");
 
-  // Fallback thumbnail (prevents big blank slabs on bad URLs)
+  // Fallback thumbnail
   const FALLBACK_SVG =
     "data:image/svg+xml;utf8," +
     encodeURIComponent(`
@@ -85,21 +85,22 @@ export default function Dashboard() {
     window.location.href = `${API_BASE}/api/amazon/auth/login`;
   };
 
+  // Fetch deals by category label; backend maps label -> collections safely
   const fetchDealsByCategory = async (label) => {
     if (!label) return;
     setDealsLoading(true);
     setDealsMsg("");
     setDeals([]);
 
-    const collection = COLLECTION_MAP[label]; // resolve label → collection
-
     try {
       const r = await fetch(`${API_BASE}/api/amazon/deals`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ collection })
+        body: JSON.stringify({ categoryLabel: label }),
       });
       const j = await r.json();
+      if (!r.ok) throw new Error(j?.error || j?.detail || "Failed to load deals");
+
       const list = Array.isArray(j.deals) ? j.deals : [];
       setDeals(list);
       if (!list.length) setDealsMsg("No deals yet for this category.");
@@ -188,7 +189,7 @@ export default function Dashboard() {
                 <option value="" disabled style={{ background: "#151020", color: "#fff" }}>
                   Select a category…
                 </option>
-                {Object.keys(COLLECTION_MAP).map((label) => (
+                {CATEGORY_LABELS.map((label) => (
                   <option key={label} value={label} style={{ background: "#151020", color: "#fff" }}>
                     {label}
                   </option>
@@ -198,6 +199,7 @@ export default function Dashboard() {
           </div>
 
           {dealsMsg && <div className="status">{dealsMsg}</div>}
+          {dealsLoading && <div className="status">Loading deals…</div>}
 
           <div className="deals-grid">
             {deals.map((d, i) => {
@@ -325,7 +327,7 @@ export default function Dashboard() {
         }
         .secondary {
           background: rgba(255, 255, 255, 0.12);
-          color: #fff.
+          color: #fff;
         }
         .primary:hover,
         .secondary:hover {
