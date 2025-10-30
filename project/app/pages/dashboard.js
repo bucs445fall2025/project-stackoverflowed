@@ -33,6 +33,8 @@ export default function Dashboard() {
     "Grocery": "grocery",
     "Sports & Outdoors": "sports_outdoors",
     "Pet Supplies": "pet_supplies",
+    "Cleaning Supplies": "cleaning_supplies",
+
   };
 
   // Deals (dropdown only)
@@ -97,7 +99,7 @@ export default function Dashboard() {
       const r = await fetch(`${API_BASE}/api/amazon/deals`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ collection })
+        body: JSON.stringify({ category: label })
       });
       const j = await r.json();
       const list = Array.isArray(j.deals) ? j.deals : [];
