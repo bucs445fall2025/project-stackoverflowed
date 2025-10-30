@@ -33,6 +33,8 @@ export default function Dashboard() {
     "Grocery": "grocery",
     "Sports & Outdoors": "sports_outdoors",
     "Pet Supplies": "pet_supplies",
+    "Cleaning Supplies": "cleaning_supplies",
+
   };
 
   // Deals (dropdown only)
