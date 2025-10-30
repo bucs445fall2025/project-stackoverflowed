@@ -46,6 +46,23 @@ router.get('/auth/callback', amazonController.callback);
 router.get('/spapi/sandbox-check', amazonController.sandboxCheck);
 router.get('/spapi/products', amazonController.sandboxCheck);
 
+//helper
+async function forwardJsonOrText(upstreamRes) {
+  const ct = upstreamRes.headers.get("content-type") || "";
+  try {
+    if (ct.includes("application/json")) return await upstreamRes.json();
+    const text = await upstreamRes.text();
+    return { error: text };
+  } catch (e) {
+    try {
+      const text = await upstreamRes.text();
+      return { error: "Non-JSON response", body: text };
+    } catch {
+      return { error: "Failed to parse upstream response" };
+    }
+  }
+}
+
 
 
 // Exports the router so it can be imported into app.js
