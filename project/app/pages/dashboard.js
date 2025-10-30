@@ -34,6 +34,7 @@ export default function Dashboard() {
     "Grocery",
     "Sports & Outdoors",
     "Pet Supplies",
+    "Cleaning Supplies"
   ];
 
   // Deals (dropdown only)
