@@ -33,8 +33,6 @@ export default function Dashboard() {
     "Grocery": "grocery",
     "Sports & Outdoors": "sports_outdoors",
     "Pet Supplies": "pet_supplies",
-    "Cleaning Supplies": "cleaning_supplies",
-
   };
 
   // Deals (dropdown only)
@@ -92,14 +90,14 @@ export default function Dashboard() {
     setDealsLoading(true);
     setDealsMsg("");
     setDeals([]);
-  
+
     const collection = COLLECTION_MAP[label]; // resolve label → collection
-  
+
     try {
       const r = await fetch(`${API_BASE}/api/amazon/deals`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category: label })
+        body: JSON.stringify({ collection })
       });
       const j = await r.json();
       const list = Array.isArray(j.deals) ? j.deals : [];
@@ -111,9 +109,6 @@ export default function Dashboard() {
       setDealsLoading(false);
     }
   };
-  
-  
-
 
   // When user selects a category, fetch deals immediately
   const onCategoryChange = (e) => {
@@ -193,7 +188,7 @@ export default function Dashboard() {
                 <option value="" disabled style={{ background: "#151020", color: "#fff" }}>
                   Select a category…
                 </option>
-                {CATEGORY_LABELS.map((label) => (
+                {Object.keys(COLLECTION_MAP).map((label) => (
                   <option key={label} value={label} style={{ background: "#151020", color: "#fff" }}>
                     {label}
                   </option>
@@ -203,7 +198,6 @@ export default function Dashboard() {
           </div>
 
           {dealsMsg && <div className="status">{dealsMsg}</div>}
-          {dealsLoading && <div className="status">Loading deals…</div>}
 
           <div className="deals-grid">
             {deals.map((d, i) => {
@@ -331,7 +325,7 @@ export default function Dashboard() {
         }
         .secondary {
           background: rgba(255, 255, 255, 0.12);
-          color: #fff;
+          color: #fff.
         }
         .primary:hover,
         .secondary:hover {
