@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>FBAlgo — Intro Slide</title>
+  <style>
+    /* Reset */
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+      font-family: "Space Grotesk", Arial, sans-serif;
+      color: white;
+    }
+
+    /* Background */
+    body {
+      background: radial-gradient(1200px 800px at 20% -10%, #4b1d7a 0%, transparent 60%),
+                  radial-gradient(1200px 800px at 80% -10%, #2a0c52 0%, transparent 60%),
+                  #0d0222;
+    }
+
+    canvas#stars {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 0;
+    }
+
+    .content {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      text-align: center;
+    }
+
+    h1 {
+      font-size: clamp(2.5rem, 6vw, 5rem);
+      font-weight: 700;
+      margin: 0.25em 0;
+      text-shadow: 0 3px 12px rgba(0,0,0,0.6);
+    }
+
+    h2 {
+      font-size: clamp(1.5rem, 3vw, 2rem);
+      font-weight: 400;
+      margin: 0.25em 0;
+      opacity: 0.85;
+    }
+
+    p {
+      font-size: clamp(1rem, 2vw, 1.25rem);
+      opacity: 0.9;
+    }
+
+    .rocket {
+      font-size: 3rem;
+      margin-top: 1rem;
+      animation: float 2.5s ease-in-out infinite;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-12px); }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="stars"></canvas>
+  <div class="content">
+    <h1>FBAlgo</h1>
+    <h2>Stack Overflowed</h2>
+    <p>Samuel Buckler, Nicholas Denobrega, Jackson Searles</p>
+    <div class="rocket">🚀</div>
+  </div>
+
+  <script>
+    // Simple starfield
+    const canvas = document.getElementById("stars");
+    const ctx = canvas.getContext("2d");
+    let stars = [];
+
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      stars = [];
+      for (let i = 0; i < 200; i++) {
+        stars.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          radius: Math.random() * 1.2,
+          alpha: Math.random(),
+          dx: (Math.random() - 0.5) * 0.1,
+          dy: (Math.random() - 0.5) * 0.1
+        });
+      }
+    }
+
+    function drawStars() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#fff";
+      for (let s of stars) {
+        ctx.globalAlpha = s.alpha;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.radius, 0, 2 * Math.PI);
+        ctx.fill();
+        s.x += s.dx;
+        s.y += s.dy;
+        if (s.x < 0 || s.x > canvas.width) s.dx *= -1;
+        if (s.y < 0 || s.y > canvas.height) s.dy *= -1;
+      }
+      requestAnimationFrame(drawStars);
+    }
+
+    window.addEventListener("resize", resize);
+    resize();
+    drawStars();
+  </script>
+</body>
+</html>
