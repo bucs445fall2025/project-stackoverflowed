@@ -23,6 +23,12 @@ app.use("/api/commerce", commerceRoutes);
 app.use("/api", require("./routes/dbDebug"));
 app.use("/api", require("./routes/usersDebug"));
 
+//User routes
+const userRoutes = require("./routes/userRoutes"); // Importing user routes
+app.use("/api/users", userRoutes); // Mounts them under /api/users
+const walmartRead = require("./routes/walmartRead");
+app.use("/api/amazon", walmartRead);
+
 // Health check
 app.get("/", (_req, res) => res.send("Backend running ✅"));
 
