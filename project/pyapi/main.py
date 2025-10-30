@@ -662,8 +662,6 @@ async def index_amazon_by_title(
     wm_db, amz_db = _get_colls(wm_coll, amz_coll)  # new
 
     match: Dict[str, Any] = {"title": {"$exists": True, "$ne": None}}
-    if req.category:
-        match["category"] = req.category
     if req.kw:
         match["title"] = {"$regex": req.kw, "$options": "i"}
 
