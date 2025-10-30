@@ -163,46 +163,45 @@ export default function Dashboard() {
           <h2 className={`${spaceGrotesk.className} products-title`}>Find Deals (Walmart vs Amazon)</h2>
           <p className="subtitle">Choose a category to fetch example deals.</p>
 
-          <div className="card">
-            <h2 className={`${spaceGrotesk.className} products-title`}>Find Deals (Walmart vs Amazon)</h2>
-            <p className="subtitle">Choose a category to fetch example deals.</p>
-
-            <div className="actions" style={{ alignItems: "center" }}>
-              <label
+          <div className="actions" style={{ alignItems: "center" }}>
+            <label
+              style={{
+                display: "flex",
+                gap: 8,
+                alignItems: "center",
+                color: "#fff",
+              }}
+            >
+              Category:
+              <select
+                value={selectedCategory}
+                onChange={onCategoryChange}
                 style={{
-                  display: "flex",
-                  gap: 8,
-                  alignItems: "center",
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  border: "1px solid rgba(255,255,255,0.3)",
+                  background: "rgba(0, 0, 0, 0.45)",
                   color: "#fff",
+                  minWidth: 220,
+                  appearance: "none",
+                  WebkitAppearance: "none",
+                  MozAppearance: "none",
                 }}
               >
-                Category:
-                <select
-                  value={selectedCategory}
-                  onChange={onCategoryChange}
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: 8,
-                    border: "1px solid rgba(255,255,255,0.2)",
-                    background: "rgba(255,255,255,0.08)",
-                    color: "#fff",
-                    minWidth: 220,
-                  }}
-                >
-                  <option value="" disabled>
-                    Select a category…
+                <option value="" disabled style={{ background: "#151020", color: "#fff" }}>
+                  Select a category…
+                </option>
+                {CATEGORY_LABELS.map((label) => (
+                  <option key={label} value={label} style={{ background: "#151020", color: "#fff" }}>
+                    {label}
                   </option>
-                  {Object.keys(COLLECTION_MAP).map((label) => (
-                    <option key={label} value={label}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
+                ))}
+              </select>
+            </label>
           </div>
 
           {dealsMsg && <div className="status">{dealsMsg}</div>}
+          {dealsLoading && <div className="status">Loading deals…</div>}
 
           <div className="deals-grid">
             {deals.map((d, i) => {
@@ -330,7 +329,7 @@ export default function Dashboard() {
         }
         .secondary {
           background: rgba(255, 255, 255, 0.12);
-          color: #fff.
+          color: #fff;
         }
         .primary:hover,
         .secondary:hover {
