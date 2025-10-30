@@ -6,6 +6,10 @@ const router = express.Router();
 // Imports all exported functions from amazonController. They handle the logic at a certain route
 const amazonController = require('../controllers/amazonController');
 
+//OpenAI setup
+const OpenAI = require("openai");
+const openai = new OpenAI({ apiKey: process.env.OPENAI_KEY });
+
 const COLLECTION_MAP = {
   "Electronics": "amz_electronics",
   "Health & Wellness": "amz_health_wellness",
@@ -135,30 +139,63 @@ router.post("/amazon/scrape-category", async (req, res) => {
   
       const { wm_coll, amz_coll } = mapLabelToCollections(category);
   
-      // Build a base QS with both coll names; add optional thresholds if provided
+      // Build base QS
       const baseParams = new URLSearchParams({ wm_coll, amz_coll });
       if (min_abs != null) baseParams.set('min_abs', String(min_abs));
       if (min_pct != null) baseParams.set('min_pct', String(min_pct));
-      if (min_sim != null) baseParams.set('min_sim', String(min_sim)); // for by-title
+      if (min_sim != null) baseParams.set('min_sim', String(min_sim));
       if (limit    != null) baseParams.set('limit', String(limit));
   
-      // UPC-based deals
+      // --- Fetch raw deals from Python ---
       const upcRes = await fetch(`${process.env.PYAPI_URL}/deals/by-upc?${baseParams.toString()}`, {
         headers: { 'Cache-Control': 'no-cache' },
       });
       const upcJson = await upcRes.json();
       const upcDeals = Array.isArray(upcJson.deals) ? upcJson.deals : [];
   
-      // Title-based deals
       const titleRes = await fetch(`${process.env.PYAPI_URL}/deals/by-title?${baseParams.toString()}`, {
         headers: { 'Cache-Control': 'no-cache' },
       });
       const titleJson = await titleRes.json();
       const titleDeals = Array.isArray(titleJson.deals) ? titleJson.deals : [];
   
-      res.status(200).json({ deals: [...upcDeals, ...titleDeals] });
+      let combinedDeals = [...upcDeals, ...titleDeals];
+  
+      // --- Run GPT filtering ---
+      if (combinedDeals.length > 0) {
+        try {
+          const completion = await openai.chat.completions.create({
+            model: "gpt-4o-mini",   // or "gpt-4o" if you want higher quality
+            messages: [
+              {
+                role: "system",
+                content: "You are a shopping assistant that filters bad or irrelevant deals. Keep only legitimate, good-value Walmart vs Amazon comparisons."
+              },
+              {
+                role: "user",
+                content: `Here is a JSON array of deals:\n\n${JSON.stringify(combinedDeals)}\n\nReturn only the best, most relevant deals as JSON.`
+              }
+            ],
+            temperature: 0.2,
+          });
+  
+          const text = completion.choices[0].message.content;
+          try {
+            // Parse GPT’s response as JSON
+            const filtered = JSON.parse(text);
+            combinedDeals = Array.isArray(filtered) ? filtered : combinedDeals;
+          } catch (e) {
+            console.warn("GPT did not return valid JSON, falling back to unfiltered deals");
+          }
+        } catch (err) {
+          console.error("GPT filtering failed:", err);
+        }
+      }
+  
+      res.status(200).json({ deals: combinedDeals });
     } catch (err) {
       console.error('Proxy error (combined deals):', err);
       res.status(500).json({ error: 'Failed to fetch deals' });
     }
   });
+  
