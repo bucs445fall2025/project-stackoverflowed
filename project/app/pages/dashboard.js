@@ -62,7 +62,7 @@ export default function Dashboard() {
     setError(null);
     setStatus("Contacting Amazon sandbox…");
     try {
-      const res = await fetch(`${API_BASE}/api/amazon/spapi/sandbox-check`);
+      const res = await fetch(`${API_BASE}/spapi/sandbox-check`);
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Sandbox check failed");
       setCheckResult(data);
@@ -83,7 +83,7 @@ export default function Dashboard() {
   }, []);
 
   const handleLinkFBA = () => {
-    window.location.href = `${API_BASE}/api/amazon/auth/login`;
+    window.location.href = `${API_BASE}/auth/login`;
   };
 
   // Fetch deals by category label; backend maps label -> collections safely
@@ -94,7 +94,7 @@ export default function Dashboard() {
     setDeals([]);
 
     try {
-      const r = await fetch(`${API_BASE}/api/amazon/deals`, {
+      const r = await fetch(`${API_BASE}/api/commerce/deals`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ category: label }),
