@@ -826,7 +826,33 @@ async def clear_db():
         "walmart_deleted": wm_res.deleted_count,
         "amazon_deleted": amz_res.deleted_count,
     }
+@app.delete("/debug/clear-category")
+async def clear_category(
+    wm_coll: Optional[str] = Query(None),
+    amz_coll: Optional[str] = Query(None),
+    match_coll: Optional[str] = Query(None),
+):
+    """
+    Utility: clear one or more per-category collections, e.g.
+      - wm_hair_care
+      - amz_hair_care
+      - match_hair_care
+    """
+    result = {}
 
+    if wm_coll:
+      res = await db[wm_coll].delete_many({})
+      result["walmart_deleted"] = res.deleted_count
+
+    if amz_coll:
+      res = await db[amz_coll].delete_many({})
+      result["amazon_deleted"] = res.deleted_count
+
+    if match_coll:
+      res = await db[match_coll].delete_many({})
+      result["match_deleted"] = res.deleted_count
+
+    return result
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Amazon cache by UPC
