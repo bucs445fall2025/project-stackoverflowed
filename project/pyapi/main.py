@@ -13,6 +13,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone, timedelta
 import httpx, asyncio, os, re, random, difflib
 from rapidfuzz import fuzz
+from urllib.parse import quote_plus #used for building walmart links
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Setup
@@ -298,12 +299,24 @@ async def walmart_scrape(req: WalmartScrapeReq, wm_coll: Optional[str] = Query(N
             if price is None:
                 continue
 
+            # 🔹 Build a robust link with fallbacks
+            raw_link = it.get("link")  # what we were relying on before
+            title = it.get("title") or ""
+
+            if not raw_link:
+                # If we know the product_id, construct the canonical Walmart PDP URL
+                raw_link = f"https://www.walmart.com/ip/{pid}"
+
+            # Last-resort safety net: search URL by title (only if pid somehow missing)
+            if not raw_link and title:
+                raw_link = f"https://www.walmart.com/search?q={quote_plus(title)}"
+
             doc = {
                 "product_id": str(pid),
-                "title": it.get("title"),
+                "title": title,
                 "brand": it.get("brand"),
                 "price": price,
-                "link": it.get("link"),
+                "link": raw_link,
                 "thumbnail": it.get("thumbnail"),
                 "category": it.get("category"),
                 "updatedAt": now_utc(),
@@ -314,11 +327,6 @@ async def walmart_scrape(req: WalmartScrapeReq, wm_coll: Optional[str] = Query(N
                 {"$set": doc, "$setOnInsert": {"createdAt": now_utc()}},
                 upsert=True,
             )
-            if res.upserted_id:
-                inserted += 1
-            else:
-                updated += res.modified_count
-            total += 1
 
         # small delay between pages to avoid bursts/429s
         await asyncio.sleep(0.4 + random.random() * 0.3)
@@ -728,6 +736,44 @@ async def walmart_enrich_upc(limit: int = 100, wm_coll: Optional[str] = Query(No
         "updated": touched,
         "set_fields": {"upc": upc_set, "brand": brand_set, "category": cat_set, "link": link_set},
     }
+
+#Backfill links with no extra serp calls
+@app.post("/walmart/backfill-links")
+async def walmart_backfill_links(
+    wm_coll: Optional[str] = Query(None),
+    limit: int = Query(5000, ge=1, le=50000),
+):
+    WM = pick_coll(wm_coll, WM_COLL)
+
+    from urllib.parse import quote_plus
+
+    filt = {
+        "$or": [
+            {"link": {"$exists": False}},
+            {"link": None},
+            {"link": ""},
+        ]
+    }
+
+    cur = WM.find(filt, {"_id": 1, "product_id": 1, "title": 1}).limit(limit)
+    docs = await cur.to_list(length=limit)
+
+    updated = 0
+    for d in docs:
+        pid = d.get("product_id")
+        title = d.get("title") or ""
+
+        if pid:
+            link = f"https://www.walmart.com/ip/{pid}"
+        elif title:
+            link = f"https://www.walmart.com/search?q={quote_plus(title)}"
+        else:
+            continue
+
+        await WM.update_one({"_id": d["_id"]}, {"$set": {"link": link}})
+        updated += 1
+
+    return {"wm_coll": wm_coll or WM_COLL, "considered": len(docs), "updated": updated}
 
 
 # ──────────────────────────────────────────────────────────────────────────────
