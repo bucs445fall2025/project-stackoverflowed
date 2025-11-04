@@ -603,7 +603,43 @@ async def wm_amz_match(
 
     return stats
 
+@app.get("/wm-amz/matches")
+async def wm_amz_matches(
+    match_coll: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=500),
+    skip: int = Query(0, ge=0),
+    min_diff: float = Query(0.0, description="Minimum absolute price difference (amz - wm)"),
+    min_pct: float = Query(0.0, description="Minimum percent difference (price_pct)"),
+):
+    """
+    View matched Walmart vs Amazon deals from the match collection.
 
+    - match_coll: which match collection to use (e.g. 'match_hair_care').
+                  If omitted, falls back to MATCH_COLL_DEFAULT.
+    - limit/skip: simple pagination.
+    - min_diff: filter to only deals where amz_price - wm_price >= min_diff.
+    - min_pct: filter to only deals where price_pct >= min_pct (e.g. 0.20 for 20%).
+    """
+    MATCH = db[match_coll] if match_coll else db[MATCH_COLL_DEFAULT]
+
+    filt: Dict[str, Any] = {}
+    if min_diff > 0:
+        filt["price_diff"] = {"$gte": min_diff}
+    if min_pct > 0:
+        filt["price_pct"] = {"$gte": min_pct}
+
+    cur = MATCH.find(filt).sort([("price_diff", -1)]).skip(skip).limit(limit)
+    deals = await cur.to_list(length=limit)
+
+    # optional: hide internal _id if you want a cleaner payload
+    for d in deals:
+        d["_id"] = str(d["_id"])
+
+    return {
+        "match_coll": match_coll or MATCH_COLL_DEFAULT,
+        "count": len(deals),
+        "deals": deals,
+    }
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Walmart UPC enrichment
