@@ -482,6 +482,7 @@ async def wm_amz_match(
             "link": 1,
             "thumbnail": 1,
             "upc": 1,
+            "category": 1,
         },
     ).limit(req.max_wm_items).to_list(req.max_wm_items)
 
@@ -583,6 +584,7 @@ async def wm_amz_match(
                 "link": wm.get("link"),
                 "thumbnail": wm.get("thumbnail"),
                 "upc": wm.get("upc"),
+                "category": wm.get("category"),
             },
             "amz": {
                 "title": amz_doc.get("title"),

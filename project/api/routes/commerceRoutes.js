@@ -211,4 +211,65 @@ router.post("/deals", async (req, res) => {
   }
 });
 
+
+// ───────────────────────────────────────────────────────────────
+// Matched Deals from match_<slug> (category-based scraper)
+// ───────────────────────────────────────────────────────────────
+router.post("/matches", async (req, res) => {
+  try {
+    const { category = "", min_diff, min_pct, limit } = req.body || {};
+    if (!category) return res.status(400).json({ error: "category is required" });
+
+    const slug = slugify(category);
+    const match_coll = `match_${slug}`;
+
+    const qs = new URLSearchParams({ match_coll });
+
+    // Optional filters — defaults live in Python; set here if you want overrides
+    if (min_diff != null) qs.set("min_diff", String(min_diff)); // e.g. 5.0
+    if (min_pct != null) qs.set("min_pct", String(min_pct));     // e.g. 0.2 (20%)
+    if (limit != null) qs.set("limit", String(limit));           // e.g. 100
+
+    const url = `${process.env.PYAPI_URL}/wm-amz/matches?${qs.toString()}`;
+    const r = await fetch(url);
+
+    const payload = await forwardJsonOrText(r);
+    if (!r.ok) {
+      return res.status(r.status).json(payload);
+    }
+
+    const rawDeals = Array.isArray(payload.deals) ? payload.deals : [];
+
+    // Map match docs -> existing dashboard "deal" shape
+    const mapped = rawDeals.map((m) => {
+      const wm = m.wm || {};
+      const amz = m.amz || {};
+      const meta = m.match_meta || {};
+
+      return {
+        wm: {
+          ...wm,
+          product_id: m.wm_product_id,
+        },
+        amz: {
+          ...amz,
+          asin: m.amz_asin,
+          match_score: meta.title_similarity,
+          checked_at: m.matched_at,
+        },
+        savings_abs: m.price_diff,
+        savings_pct: (m.price_pct || 0) * 100, // convert fraction -> %
+      };
+    });
+
+    return res.status(200).json({ deals: mapped });
+  } catch (err) {
+    console.error("Proxy error (matches):", err);
+    return res.status(500).json({ error: "Failed to fetch matched deals" });
+  }
+});
+
+
 module.exports = router;
+
+
