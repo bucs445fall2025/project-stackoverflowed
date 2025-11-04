@@ -32,6 +32,7 @@ MONGO_URL   = os.getenv("MONGO_URL")
 MONGO_DB    = os.getenv("MONGO_DB", "MongoDB")
 WM_COLL     = os.getenv("MONGO_WALMART_COLLECTION", "walmart_items")
 AMZ_COLL    = os.getenv("MONGO_AMAZON_COLLECTION", "amazon_offers")
+MATCH_COLL_DEFAULT = os.getenv("MONGO_MATCH_COLLECTION", "wm_amz_matches") #for category <-> category matching
 
 if not MONGO_URL:
     raise RuntimeError("MONGO_URL env var is required")
@@ -249,6 +250,19 @@ class WalmartScrapeReq(BaseModel):
     pages: int = Field(1, ge=1, le=10)
     max_products: int = 100
 
+class AmazonScrapeReq(BaseModel):
+    query: str
+    pages: int = Field(1, ge=1, le=10)   # e.g. 4 pages to ensure O(#pages) serp calls
+    max_products: int = 100              # e.g. 200
+
+class MatchReq(BaseModel):
+    max_wm_items: int = 400      # how many Walmart items to consider per run
+    max_amz_items: int = 400     # how many Amazon scraped items to consider
+    min_title_sim: int = 80      # RapidFuzz token_set_ratio threshold (looser default), for stricter title match increase to 88-92
+    require_brand: bool = False  # default: don't require brand match, flip to true for stronger matching
+
+
+
 @app.post("/walmart/scrape")
 async def walmart_scrape(req: WalmartScrapeReq, wm_coll: Optional[str] = Query(None)):
     WM = pick_coll(wm_coll, WM_COLL)
@@ -318,6 +332,278 @@ async def walmart_scrape(req: WalmartScrapeReq, wm_coll: Optional[str] = Query(N
         "updated": updated,
         "total": total,
     }
+
+@app.post("/amazon/scrape")
+async def amazon_scrape(
+    req: AmazonScrapeReq,
+    amz_coll: Optional[str] = Query(None),
+):
+    """
+    Category/keyword scrape for Amazon via SerpAPI.
+    - Uses at most `pages` SerpAPI calls (1 per page).
+    - Writes into the per-category Amazon collection, reusing amz_coll with key_type="asin_scrape".
+    """
+    AMZ = pick_coll(amz_coll, AMZ_COLL)
+
+    inserted = updated = total = 0
+    pages_fetched = 0
+    page_errors = 0
+
+    for pg in range(1, req.pages + 1):
+        if total >= req.max_products:
+            break
+
+        try:
+            data = await amazon_search_page(req.query, page=pg)
+            items = data.get("organic_results", []) or []
+            pages_fetched += 1
+        except HTTPException:
+            page_errors += 1
+            await asyncio.sleep(1.0 + random.random())
+            continue
+
+        for it in items:
+            if total >= req.max_products:
+                break
+
+            if not is_valid_amz_result(it):
+                continue
+
+            asin = it.get("asin")
+            if not asin:
+                continue
+
+            price = parse_price(it.get("price"))
+            if price is None:
+                continue
+
+            link = clean_amz_link(asin, it.get("link") or it.get("product_link"))
+            if not link:
+                continue
+
+            doc = {
+                "key_type": "asin_scrape",
+                "key_val": asin,
+                "asin": asin,
+                "title": it.get("title"),
+                "brand": it.get("brand"),
+                "price": price,
+                "link": link,
+                "thumbnail": it.get("thumbnail") or it.get("image"),
+                "category_hint": req.query,
+                "updatedAt": now_utc(),
+            }
+
+            res = await AMZ.update_one(
+                {"key_type": "asin_scrape", "key_val": asin},
+                {"$set": doc, "$setOnInsert": {"createdAt": now_utc()}},
+                upsert=True,
+            )
+            if res.upserted_id:
+                inserted += 1
+            else:
+                updated += res.modified_count
+            total += 1
+
+        # small delay between pages to avoid bursts/429s
+        await asyncio.sleep(0.4 + random.random() * 0.3)
+
+    return {
+        "query": req.query,
+        "pages_requested": req.pages,
+        "pages_fetched": pages_fetched,
+        "page_errors": page_errors,
+        "inserted": inserted,
+        "updated": updated,
+        "total": total,
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Amazon ingest (category/keyword scrape via SerpAPI)
+# ──────────────────────────────────────────────────────────────────────────────
+
+async def amazon_search_page(query: str, page: int = 1):
+    """
+    Single SerpAPI call per page.
+    Use `pages` parameter in /amazon/scrape to keep total calls bounded.
+    """
+    return await serp_get(
+        "https://serpapi.com/search.json",
+        {
+            "engine": "amazon",
+            "amazon_domain": "amazon.com",
+            "k": query,
+            "page": page,
+            "gl": "us",
+            "hl": "en",
+            "no_cache": "true",
+        },
+    )
+
+@app.post("/wm-amz/match")
+async def wm_amz_match(
+    req: MatchReq,
+    wm_coll: Optional[str] = Query(None),
+    amz_coll: Optional[str] = Query(None),
+    match_coll: Optional[str] = Query(None),
+):
+    """
+    Match Walmart items against Amazon scraped items (key_type='asin_scrape'),
+    and move confirmed matches into a match collection.
+
+    Rules:
+      - No extra Serp calls: operates purely on Mongo data.
+      - Each Amazon item can match at most one Walmart item.
+      - A match is kept ONLY if Walmart price < Amazon price.
+      - When a match is created:
+          * insert into `match_coll` (or MATCH_COLL_DEFAULT)
+          * delete original docs from Walmart + Amazon collections.
+    """
+    WM, AMZ = _get_colls(wm_coll, amz_coll)
+    MATCH = db[match_coll] if match_coll else db[MATCH_COLL_DEFAULT]
+
+    # Limit workload for safety
+    wm_docs = await WM.find(
+        {},
+        {
+            "product_id": 1,
+            "title": 1,
+            "brand": 1,
+            "price": 1,
+            "link": 1,
+            "thumbnail": 1,
+            "upc": 1,
+        },
+    ).limit(req.max_wm_items).to_list(req.max_wm_items)
+
+    amz_docs = await AMZ.find(
+        {"key_type": "asin_scrape"},
+        {
+            "asin": 1,
+            "title": 1,
+            "brand": 1,
+            "price": 1,
+            "link": 1,
+            "thumbnail": 1,
+        },
+    ).limit(req.max_amz_items).to_list(req.max_amz_items)
+
+    used_amz_ids = set()  # ensure each Amazon item is used at most once
+
+    stats = {
+        "considered_wm": len(wm_docs),
+        "considered_amz": len(amz_docs),
+        "matched": 0,
+        "skipped_price_not_better": 0,
+        "skipped_below_similarity": 0,
+        "skipped_no_price": 0,
+        "skipped_no_title": 0,
+        "skipped_brand_mismatch": 0,
+    }
+
+    for wm in wm_docs:
+        wm_title = wm.get("title") or ""
+        if not wm_title:
+            stats["skipped_no_title"] += 1
+            continue
+
+        wm_price = parse_price(wm.get("price"))
+        if wm_price is None:
+            stats["skipped_no_price"] += 1
+            continue
+
+        wm_brand = wm.get("brand")
+
+        best_amz = None
+        best_sim = -1.0
+
+        for amz in amz_docs:
+            amz_id = str(amz.get("_id"))
+            if amz_id in used_amz_ids:
+                continue
+
+            amz_title = amz.get("title") or ""
+            if not amz_title:
+                continue
+
+            amz_price = parse_price(amz.get("price"))
+            if amz_price is None:
+                continue
+
+            # similarity via RapidFuzz token_set_ratio
+            sim = fuzz.token_set_ratio(wm_title, amz_title)
+            if sim < req.min_title_sim:
+                continue
+
+            # optional brand check
+            if req.require_brand and wm_brand:
+                if not _brand_in_title(wm_brand, amz_title):
+                    stats["skipped_brand_mismatch"] += 1
+                    continue
+
+            # optional size sanity check; if it fails, skip
+            if not sizes_compatible(wm_title, amz_title):
+                continue
+
+            if sim > best_sim:
+                best_sim = sim
+                best_amz = (amz, amz_price)
+
+        if not best_amz:
+            stats["skipped_below_similarity"] += 1
+            continue
+
+        amz_doc, amz_price = best_amz
+
+        # keep only if Walmart is strictly cheaper
+        if wm_price >= amz_price:
+            stats["skipped_price_not_better"] += 1
+            continue
+
+        # Build match document
+        diff = amz_price - wm_price
+        pct = diff / amz_price if amz_price > 0 else 0.0
+
+        match_doc = {
+            "wm_product_id": wm.get("product_id"),
+            "amz_asin": amz_doc.get("asin"),
+            "wm": {
+                "title": wm_title,
+                "brand": wm_brand,
+                "price": wm_price,
+                "link": wm.get("link"),
+                "thumbnail": wm.get("thumbnail"),
+                "upc": wm.get("upc"),
+            },
+            "amz": {
+                "title": amz_doc.get("title"),
+                "brand": amz_doc.get("brand"),
+                "price": amz_price,
+                "link": amz_doc.get("link"),
+                "thumbnail": amz_doc.get("thumbnail"),
+            },
+            "match_meta": {
+                "title_similarity": best_sim,
+                "require_brand": req.require_brand,
+                "min_title_sim": req.min_title_sim,
+            },
+            "price_diff": diff,
+            "price_pct": pct,
+            "matched_at": now_utc(),
+        }
+
+        # Insert match & delete originals
+        await MATCH.insert_one(match_doc)
+        await WM.delete_one({"_id": wm["_id"]})
+        await AMZ.delete_one({"_id": amz_doc["_id"]})
+
+        used_amz_ids.add(str(amz_doc["_id"]))
+        stats["matched"] += 1
+
+    return stats
+
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Walmart UPC enrichment
