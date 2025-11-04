@@ -28,6 +28,38 @@ curl -s "$API/deals/by-title?min_abs=3&min_pct=0.15&min_sim=90&limit=50"
 
 
 
+RUN PYTHON ROUTES FOR CATEGORY TO CATEGORY SCRAPING:
+export PYAPI_URL="https://diligent-spontaneity-production-d286.up.railway.app"
+
+curl -X POST "$PYAPI_URL/walmart/scrape?wm_coll=wm_hair_care" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "hair care",
+    "pages": 4,
+    "max_products": 200
+  }'
+
+  curl -X POST "$PYAPI_URL/amazon/scrape?amz_coll=amz_hair_care" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "hair care",
+    "pages": 4,
+    "max_products": 200
+  }'
+
+curl -X POST "$PYAPI_URL/wm-amz/match?wm_coll=wm_hair_care&amz_coll=amz_hair_care&match_coll=match_hair_care" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "max_wm_items": 400,
+    "max_amz_items": 400,
+    "min_title_sim": 80,
+    "require_brand": false
+  }'
+
+Refined deals based on price:
+curl "$PYAPI_URL/wm-amz/matches?match_coll=match_hair_care&limit=50&min_diff=5&min_pct=0.2"
+Raw matches:
+curl "$PYAPI_URL/wm-amz/matches?match_coll=match_hair_care&limit=50"
 
 
 
