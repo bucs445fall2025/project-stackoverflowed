@@ -34,7 +34,9 @@ export default function Dashboard() {
     "Grocery",
     "Sports & Outdoors",
     "Pet Supplies",
-    "Cleaning Supplies"
+    "Cleaning Supplies",
+    "Hair Care",
+    "Spices"
   ];
 
   // Deals (dropdown only)
