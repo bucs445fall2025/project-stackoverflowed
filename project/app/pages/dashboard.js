@@ -36,7 +36,8 @@ export default function Dashboard() {
     "Pet Supplies",
     "Cleaning Supplies",
     "Hair Care",
-    "Spices"
+    "Spices",
+    "non perishable food"
   ];
 
   // Deals (dropdown only)

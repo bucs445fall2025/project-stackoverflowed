@@ -61,6 +61,12 @@ curl "$PYAPI_URL/wm-amz/matches?match_coll=match_hair_care&limit=50&min_diff=5&m
 Raw matches:
 curl "$PYAPI_URL/wm-amz/matches?match_coll=match_hair_care&limit=50"
 
+Clear a category:
+curl -X DELETE "$PYAPI_URL/debug/clear-category?match_coll=match_hair_care"
+
+backfill with links (necessary to run before running the matches route):
+curl -X POST "https://diligent-spontaneity-production-d286.up.railway.app/walmart/backfill-links?coll=wm_hair_care"
+
 
 
 
