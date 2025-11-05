@@ -31,23 +31,23 @@ curl -s "$API/deals/by-title?min_abs=3&min_pct=0.15&min_sim=90&limit=50"
 RUN PYTHON ROUTES FOR CATEGORY TO CATEGORY SCRAPING:
 export PYAPI_URL="https://diligent-spontaneity-production-d286.up.railway.app"
 
-curl -X POST "$PYAPI_URL/walmart/scrape?wm_coll=wm_hair_care" \
+curl -X POST "$PYAPI_URL/walmart/scrape?wm_coll=wm_cleaning_supplies" \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "hair care",
+    "query": "cleaning supplies",
     "pages": 4,
     "max_products": 200
   }'
 
-  curl -X POST "$PYAPI_URL/amazon/scrape?amz_coll=amz_hair_care" \
+curl -X POST "$PYAPI_URL/amazon/scrape?amz_coll=amz_cleaning_supplies" \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "hair care",
+    "query": "cleaning supplies",
     "pages": 4,
     "max_products": 200
   }'
 
-curl -X POST "$PYAPI_URL/wm-amz/match?wm_coll=wm_hair_care&amz_coll=amz_hair_care&match_coll=match_hair_care" \
+curl -X POST "$PYAPI_URL/wm-amz/match?wm_coll=wm_cleaning_supplies&amz_coll=amz_cleaning_supplies&match_coll=match_cleaning_supplies" \
   -H "Content-Type: application/json" \
   -d '{
     "max_wm_items": 400,
@@ -62,7 +62,7 @@ Raw matches:
 curl "$PYAPI_URL/wm-amz/matches?match_coll=match_hair_care&limit=50"
 
 Clear a category:
-curl -X DELETE "$PYAPI_URL/debug/clear-category?match_coll=match_hair_care"
+curl -X DELETE "$PYAPI_URL/debug/clear-category?match_coll=match_pet_supplies"
 
 backfill with links (necessary to run before running the matches route):
 curl -X POST "https://diligent-spontaneity-production-d286.up.railway.app/walmart/backfill-links?coll=wm_hair_care"
