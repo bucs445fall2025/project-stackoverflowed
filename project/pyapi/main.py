@@ -31,8 +31,6 @@ app.add_middleware(
 SERPAPI_KEY = os.getenv("SERPAPI_KEY")
 MONGO_URL   = os.getenv("MONGO_URL")
 MONGO_DB    = os.getenv("MONGO_DB", "MongoDB")
-WM_COLL     = os.getenv("MONGO_WALMART_COLLECTION", "walmart_items")
-AMZ_COLL    = os.getenv("MONGO_AMAZON_COLLECTION", "amazon_offers")
 MATCH_COLL_DEFAULT = os.getenv("MONGO_MATCH_COLLECTION", "wm_amz_matches") #for category <-> category matching
 
 if not MONGO_URL:
@@ -41,19 +39,6 @@ if not MONGO_URL:
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[MONGO_DB]
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Startup
-# ──────────────────────────────────────────────────────────────────────────────
-
-@app.on_event("startup")
-async def _startup_indexes():
-    await db[WM_COLL].create_index("product_id", unique=True, sparse=True)
-    await db[WM_COLL].create_index("upc", sparse=True)
-    await db[WM_COLL].create_index([("updatedAt",-1)])
-    await db[AMZ_COLL].create_index([("key_type",1),("key_val",1)], unique=True)
-    await db[AMZ_COLL].create_index([("checked_at",-1)])
-
-    
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Utils
@@ -62,10 +47,6 @@ def _get_colls(wm_coll: Optional[str], amz_coll: Optional[str]):
     wm_db  = db[wm_coll]  if wm_coll  else db[WM_COLL]
     amz_db = db[amz_coll] if amz_coll else db[AMZ_COLL]
     return wm_db, amz_db
-
-def pick_coll(name: Optional[str], fallback_env_name: str):
-    # name: runtime override (e.g., "wm_electronics"), otherwise env default name
-    return db[name] if name else db[fallback_env_name]
 
 def now_utc() -> datetime: return datetime.now(timezone.utc)
 def now_iso() -> str: return now_utc().isoformat()
@@ -439,7 +420,7 @@ async def amazon_scrape(
     - Uses at most `pages` SerpAPI calls (1 per page).
     - Writes into the per-category Amazon collection, reusing amz_coll with key_type="asin_scrape".
     """
-    AMZ = pick_coll(amz_coll, AMZ_COLL)
+    AMZ = amz_coll
 
     inserted = updated = total = 0
     pages_fetched = 0
@@ -723,7 +704,7 @@ async def walmart_backfill_links(
     wm_coll: Optional[str] = Query(None),
     limit: int = Query(5000, ge=1, le=50000),
 ):
-    WM = pick_coll(wm_coll, WM_COLL)
+    WM = wm_coll
 
     from urllib.parse import quote_plus
 
