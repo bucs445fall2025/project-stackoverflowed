@@ -37,7 +37,8 @@ export default function Dashboard() {
     "Cleaning Supplies",
     "Hair Care",
     "Spices",
-    "non perishable food"
+    "non perishable food",
+    "Christmas"
   ];
 
   // Deals (dropdown only)
