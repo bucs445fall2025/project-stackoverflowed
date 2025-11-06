@@ -256,6 +256,100 @@ class MatchReq(BaseModel):
     min_title_sim: int = 80      # RapidFuzz token_set_ratio threshold (looser default), for stricter title match increase to 88-92
     require_brand: bool = False  # default: don't require brand match, flip to true for stronger matching
 
+class IndexAmazonByTitleReq(BaseModel):
+    category: Optional[str] = None          # optional Walmart category filter
+    kw: Optional[str] = None                # optional title keyword filter
+    limit_items: int = 400                  # how many Walmart items to consider
+    recache_hours: int = 48                 # skip re-fetching recent cache
+    max_serp_calls: int = 200               # hard cap on SerpAPI calls this run
+    min_similarity: int = 86                # RapidFuzz token_set_ratio threshold (0..100)
+    require_brand: bool = True              # if Walmart brand is known, require the brand to appear in Amazon title
+    per_call_delay_ms: int = 350            # throttle to avoid SerpAPI 429s
+
+def _norm_brand(b: Optional[str]) -> Optional[str]:
+    if not b:
+        return None
+    b = re.sub(r"[^a-z0-9]+", " ", b.lower()).strip()
+    return b or None
+
+def _brand_in_title(brand: Optional[str], title: Optional[str]) -> bool:
+    if not brand or not title:
+        return False
+    b = _norm_brand(brand)
+    t = re.sub(r"[^a-z0-9]+", " ", title.lower())
+    if not b:
+        return False
+    # loose contains and token match
+    return b in t or any(tok and tok in t for tok in b.split())
+
+def _pick_best_amz_by_title(
+    wm_title: str,
+    amz_candidates: List[Dict[str, Any]],
+    *,
+    wm_brand: Optional[str],
+    min_similarity: int,
+    require_brand: bool
+) -> Optional[Dict[str, Any]]:
+    """
+    Choose the best Amazon result using RapidFuzz token_set_ratio.
+    Optionally require that the Walmart brand appears in the Amazon title.
+    """
+    best: Optional[Dict[str, Any]] = None
+    best_score = -1
+
+    for it in amz_candidates or []:
+        # normalize + price
+        title = it.get("title") or ""
+        price_num = parse_price(it.get("price"))
+        if not title or price_num is None:
+            continue
+
+        sim = fuzz.token_set_ratio(wm_title, title)
+        if sim < min_similarity:
+            continue
+
+        if require_brand and wm_brand:
+            if not _brand_in_title(wm_brand, title):
+                continue
+
+        # favor non-sponsored a bit, and slightly favor shorter titles
+        sponsored = str(it.get("badge") or it.get("sponsored") or "").lower().find("sponsor") >= 0
+        adj = sim - (3 if sponsored else 0) + (2 if len(title) < 140 else 0)
+
+        if adj > best_score:
+            best_score = adj
+            best = {
+                "asin": it.get("asin"),
+                "title": title,
+                "link": it.get("link") or it.get("product_link"),
+                "price_num": price_num,
+                "raw_badge": it.get("badge"),
+                "sim": sim,
+            }
+
+    return best
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Amazon ingest (category/keyword scrape via SerpAPI)
+# ──────────────────────────────────────────────────────────────────────────────
+
+async def amazon_search_page(query: str, page: int = 1):
+    """
+    Single SerpAPI call per page.
+    Use `pages` parameter in /amazon/scrape to keep total calls bounded.
+    """
+    return await serp_get(
+        "https://serpapi.com/search.json",
+        {
+            "engine": "amazon",
+            "amazon_domain": "amazon.com",
+            "k": query,
+            "page": page,
+            "gl": "us",
+            "hl": "en",
+            "no_cache": "true",
+        },
+    )
 
 
 @app.post("/walmart/scrape")
@@ -419,29 +513,6 @@ async def amazon_scrape(
         "updated": updated,
         "total": total,
     }
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Amazon ingest (category/keyword scrape via SerpAPI)
-# ──────────────────────────────────────────────────────────────────────────────
-
-async def amazon_search_page(query: str, page: int = 1):
-    """
-    Single SerpAPI call per page.
-    Use `pages` parameter in /amazon/scrape to keep total calls bounded.
-    """
-    return await serp_get(
-        "https://serpapi.com/search.json",
-        {
-            "engine": "amazon",
-            "amazon_domain": "amazon.com",
-            "k": query,
-            "page": page,
-            "gl": "us",
-            "hl": "en",
-            "no_cache": "true",
-        },
-    )
 
 @app.post("/wm-amz/match")
 async def wm_amz_match(
@@ -693,6 +764,7 @@ async def clear_db():
         "walmart_deleted": wm_res.deleted_count,
         "amazon_deleted": amz_res.deleted_count,
     }
+
 @app.delete("/debug/clear-category")
 async def clear_category(
     wm_coll: Optional[str] = Query(None),
@@ -721,78 +793,6 @@ async def clear_category(
 
     return result
 
-class IndexAmazonByTitleReq(BaseModel):
-    category: Optional[str] = None          # optional Walmart category filter
-    kw: Optional[str] = None                # optional title keyword filter
-    limit_items: int = 400                  # how many Walmart items to consider
-    recache_hours: int = 48                 # skip re-fetching recent cache
-    max_serp_calls: int = 200               # hard cap on SerpAPI calls this run
-    min_similarity: int = 86                # RapidFuzz token_set_ratio threshold (0..100)
-    require_brand: bool = True              # if Walmart brand is known, require the brand to appear in Amazon title
-    per_call_delay_ms: int = 350            # throttle to avoid SerpAPI 429s
-
-def _norm_brand(b: Optional[str]) -> Optional[str]:
-    if not b:
-        return None
-    b = re.sub(r"[^a-z0-9]+", " ", b.lower()).strip()
-    return b or None
-
-def _brand_in_title(brand: Optional[str], title: Optional[str]) -> bool:
-    if not brand or not title:
-        return False
-    b = _norm_brand(brand)
-    t = re.sub(r"[^a-z0-9]+", " ", title.lower())
-    if not b:
-        return False
-    # loose contains and token match
-    return b in t or any(tok and tok in t for tok in b.split())
-
-def _pick_best_amz_by_title(
-    wm_title: str,
-    amz_candidates: List[Dict[str, Any]],
-    *,
-    wm_brand: Optional[str],
-    min_similarity: int,
-    require_brand: bool
-) -> Optional[Dict[str, Any]]:
-    """
-    Choose the best Amazon result using RapidFuzz token_set_ratio.
-    Optionally require that the Walmart brand appears in the Amazon title.
-    """
-    best: Optional[Dict[str, Any]] = None
-    best_score = -1
-
-    for it in amz_candidates or []:
-        # normalize + price
-        title = it.get("title") or ""
-        price_num = parse_price(it.get("price"))
-        if not title or price_num is None:
-            continue
-
-        sim = fuzz.token_set_ratio(wm_title, title)
-        if sim < min_similarity:
-            continue
-
-        if require_brand and wm_brand:
-            if not _brand_in_title(wm_brand, title):
-                continue
-
-        # favor non-sponsored a bit, and slightly favor shorter titles
-        sponsored = str(it.get("badge") or it.get("sponsored") or "").lower().find("sponsor") >= 0
-        adj = sim - (3 if sponsored else 0) + (2 if len(title) < 140 else 0)
-
-        if adj > best_score:
-            best_score = adj
-            best = {
-                "asin": it.get("asin"),
-                "title": title,
-                "link": it.get("link") or it.get("product_link"),
-                "price_num": price_num,
-                "raw_badge": it.get("badge"),
-                "sim": sim,
-            }
-
-    return best
 
 @app.post("/amazon/index-by-title")
 async def index_amazon_by_title(
