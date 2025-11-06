@@ -2,10 +2,17 @@ CMD COMMANDS TO POPULATE:
 API="https://diligent-spontaneity-production-d286.up.railway.app"
 Check API searches remaining: curl "https://serpapi.com/account?api_key=YOUR_API_KEY"
 
-Scrape:
-curl -s -X POST "$API/walmart/scrape" \
+
+curl -s -X POST "$API/amazon/index-by-title?wm_coll=wm_christmas&amz_coll=amz_christmas" \
   -H "Content-Type: application/json" \
-  -d '{"query":"christmas","pages":3,"max_products":120}' \
+  -d '{
+    "limit_items": 400,
+    "recache_hours": 24,
+    "max_serp_calls": 120,
+    "min_similarity": 90,
+    "require_brand": true,
+    "per_call_delay_ms": 350
+  }'
 
 Enrich with UPC:
 curl -s -X POST "$API/walmart/enrich-upc?limit=300"
@@ -13,7 +20,7 @@ curl -s -X POST "$API/walmart/enrich-upc?limit=300"
 Find deals by UPC (populate amazon collection)
 curl -s -X POST "$API/amazon/index-upc" \
   -H "Content-Type: application/json" \
-  -d '{"limit":400,"recache_hours":24}' \
+  -d '{"limit":400,"recache_hours":24}'
 
 Find deals by title (populate amazon collection)
 curl -s -X POST "$API/amazon/index-by-title" \
@@ -62,7 +69,7 @@ Raw matches:
 curl "$PYAPI_URL/wm-amz/matches?match_coll=match_hair_care&limit=50"
 
 Clear a category:
-curl -X DELETE "$PYAPI_URL/debug/clear-category?match_coll=match_pet_supplies"
+curl -X DELETE "$PYAPI_URL/debug/clear-category?match_coll=wm_christmas"
 
 backfill with links (necessary to run before running the matches route):
 curl -X POST "https://diligent-spontaneity-production-d286.up.railway.app/walmart/backfill-links?coll=wm_hair_care"

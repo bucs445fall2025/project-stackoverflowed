@@ -266,7 +266,7 @@ class MatchReq(BaseModel):
 
 @app.post("/walmart/scrape")
 async def walmart_scrape(req: WalmartScrapeReq, wm_coll: Optional[str] = Query(None)):
-    WM = pick_coll(wm_coll, WM_COLL)
+    WM = wm_coll
     inserted = updated = total = 0
     pages_fetched = 0
     page_errors = 0
