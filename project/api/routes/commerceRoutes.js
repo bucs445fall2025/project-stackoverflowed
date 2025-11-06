@@ -152,34 +152,39 @@ router.post("/amazon/index-by-title", async (req, res) => {
 });
 
 // ───────────────────────────────────────────────────────────────
-// Combined Deals Route ✅
-// (Category only REQUIRED now — other params optional)
+// Deals Route ✅ (Title-only; no UPC merging)
 // ───────────────────────────────────────────────────────────────
 router.post("/deals", async (req, res) => {
   try {
     const { category = "", min_abs, min_pct, min_sim, limit } = req.body || {};
-    if (!category) return res.status(400).json({ error: "category is required" });
+    if (!category) {
+      return res.status(400).json({ error: "category is required" });
+    }
 
     const { amz_coll, wm_coll } = mapLabelToCollections(category);
     const qs = new URLSearchParams({ amz_coll, wm_coll });
 
+    // Optional filters
     if (min_abs) qs.set("min_abs", String(min_abs));
     if (min_pct) qs.set("min_pct", String(min_pct));
     if (min_sim) qs.set("min_sim", String(min_sim));
     if (limit) qs.set("limit", String(limit));
 
-    const upcRes = await fetch(`${process.env.PYAPI_URL}/deals/by-upc?${qs.toString()}`);
-    const upcData = await upcRes.json();
-    const upcDeals = upcData.deals || [];
+    // 🔹 Only call the title-based route
+    const titleUrl = `${process.env.PYAPI_URL}/deals/by-title?${qs.toString()}`;
+    const titleRes = await fetch(titleUrl);
+    const payload = await forwardJsonOrText(titleRes);
 
-    const titleRes = await fetch(`${process.env.PYAPI_URL}/deals/by-title?${qs.toString()}`);
-    const titleData = await titleRes.json();
-    const titleDeals = titleData.deals || [];
+    if (!titleRes.ok) {
+      return res.status(titleRes.status).json(payload);
+    }
 
-    let combined = [...upcDeals, ...titleDeals];
+    // 🔹 Directly use title-based deals as final output
+    const deals = Array.isArray(payload.deals) ? payload.deals : [];
 
-    // ✅ GPT Deal Filtering (optional smart cleanup)
-    if (combined.length > 0) {
+    // (Optional) GPT filtering can stay if you want a sanity cleanup
+    let finalDeals = deals;
+    if (finalDeals.length > 0) {
       try {
         const completion = await openai.chat.completions.create({
           model: "gpt-4o-mini",
@@ -187,29 +192,30 @@ router.post("/deals", async (req, res) => {
             {
               role: "system",
               content:
-                "Filter out irrelevant, mismatched or bad deals. Return a JSON array of valid Walmart-vs-Amazon comparisons only.",
+                "Filter out irrelevant, mismatched, or invalid deals. Return a JSON array of valid Walmart-vs-Amazon comparisons only.",
             },
             {
               role: "user",
-              content: JSON.stringify(combined),
+              content: JSON.stringify(finalDeals),
             },
           ],
         });
 
         const result = completion.choices[0]?.message?.content || "";
         const filtered = JSON.parse(result);
-        if (Array.isArray(filtered)) combined = filtered;
+        if (Array.isArray(filtered)) finalDeals = filtered;
       } catch (e) {
         console.warn("GPT returned non-JSON — fallback to unfiltered");
       }
     }
 
-    return res.status(200).json({ deals: combined });
+    return res.status(200).json({ deals: finalDeals });
   } catch (err) {
-    console.error("Proxy error (deals):", err);
-    res.status(500).json({ error: "Failed to fetch deals" });
+    console.error("Proxy error (deals/title-only):", err);
+    return res.status(500).json({ error: "Failed to fetch deals" });
   }
 });
+
 
 
 // ───────────────────────────────────────────────────────────────
