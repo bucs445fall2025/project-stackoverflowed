@@ -79,55 +79,6 @@ router.get("/walmart/items", async (req, res) => {
   }
 });
 
-// ───────────────────────────────────────────────────────────────
-// UPC Enrichment
-// ───────────────────────────────────────────────────────────────
-router.post("/walmart/enrich-upc", async (req, res) => {
-  try {
-    const { category = "" } = req.body || {};
-    const limit = Number(req.query.limit || req.body?.limit || 100);
-
-    if (!category) return res.status(400).json({ error: "category is required" });
-
-    const { wm_coll } = mapLabelToCollections(category);
-    const qs = new URLSearchParams({ limit: String(limit), wm_coll });
-
-    const r = await fetch(`${process.env.PYAPI_URL}/walmart/enrich-upc?${qs.toString()}`, {
-      method: "POST",
-    });
-
-    const payload = await forwardJsonOrText(r);
-    return res.status(r.status).json(payload);
-  } catch (err) {
-    console.error("Proxy error (enrich-upc):", err);
-    return res.status(500).json({ error: "Failed" });
-  }
-});
-
-// ───────────────────────────────────────────────────────────────
-// Amazon Cache: Title + UPC Indexing
-// ───────────────────────────────────────────────────────────────
-router.post("/amazon/index-upc", async (req, res) => {
-  try {
-    const { category = "" } = req.body || {};
-    if (!category) return res.status(400).json({ error: "category is required" });
-
-    const { amz_coll, wm_coll } = mapLabelToCollections(category);
-    const qs = new URLSearchParams({ amz_coll, wm_coll });
-
-    const r = await fetch(`${process.env.PYAPI_URL}/amazon/index-upc?${qs.toString()}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(req.body),
-    });
-
-    const payload = await forwardJsonOrText(r);
-    return res.status(r.status).json(payload);
-  } catch (err) {
-    console.error("Proxy error (index-upc):", err);
-    res.status(500).json({ error: "Failed" });
-  }
-});
 
 router.post("/amazon/index-by-title", async (req, res) => {
   try {
