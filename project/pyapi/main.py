@@ -1,11 +1,4 @@
-# main.py — Hybrid: UPC-first Amazon lookups, category scrape for Walmart
-# Flow:
-#   1. Scrape Walmart (category/keyword)
-#   2. Enrich with UPCs
-#   3. For each unique UPC, fetch Amazon PDP once and cache it
-#   4. Match Walmart vs Amazon by UPC first, fuzzy-title fallback
-
-from fastapi import FastAPI, HTTPException, Query
+from http.client import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -37,7 +30,6 @@ if not MONGO_URL:
 
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[MONGO_DB]
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Utils
