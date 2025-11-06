@@ -79,55 +79,6 @@ router.get("/walmart/items", async (req, res) => {
   }
 });
 
-// ───────────────────────────────────────────────────────────────
-// UPC Enrichment
-// ───────────────────────────────────────────────────────────────
-router.post("/walmart/enrich-upc", async (req, res) => {
-  try {
-    const { category = "" } = req.body || {};
-    const limit = Number(req.query.limit || req.body?.limit || 100);
-
-    if (!category) return res.status(400).json({ error: "category is required" });
-
-    const { wm_coll } = mapLabelToCollections(category);
-    const qs = new URLSearchParams({ limit: String(limit), wm_coll });
-
-    const r = await fetch(`${process.env.PYAPI_URL}/walmart/enrich-upc?${qs.toString()}`, {
-      method: "POST",
-    });
-
-    const payload = await forwardJsonOrText(r);
-    return res.status(r.status).json(payload);
-  } catch (err) {
-    console.error("Proxy error (enrich-upc):", err);
-    return res.status(500).json({ error: "Failed" });
-  }
-});
-
-// ───────────────────────────────────────────────────────────────
-// Amazon Cache: Title + UPC Indexing
-// ───────────────────────────────────────────────────────────────
-router.post("/amazon/index-upc", async (req, res) => {
-  try {
-    const { category = "" } = req.body || {};
-    if (!category) return res.status(400).json({ error: "category is required" });
-
-    const { amz_coll, wm_coll } = mapLabelToCollections(category);
-    const qs = new URLSearchParams({ amz_coll, wm_coll });
-
-    const r = await fetch(`${process.env.PYAPI_URL}/amazon/index-upc?${qs.toString()}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(req.body),
-    });
-
-    const payload = await forwardJsonOrText(r);
-    return res.status(r.status).json(payload);
-  } catch (err) {
-    console.error("Proxy error (index-upc):", err);
-    res.status(500).json({ error: "Failed" });
-  }
-});
 
 router.post("/amazon/index-by-title", async (req, res) => {
   try {
@@ -152,7 +103,7 @@ router.post("/amazon/index-by-title", async (req, res) => {
 });
 
 // ───────────────────────────────────────────────────────────────
-// Deals Route ✅ (Title-only; no UPC merging)
+// Deals Route ✅ (Title-only, no UPC, no GPT filtering)
 // ───────────────────────────────────────────────────────────────
 router.post("/deals", async (req, res) => {
   try {
@@ -170,7 +121,7 @@ router.post("/deals", async (req, res) => {
     if (min_sim) qs.set("min_sim", String(min_sim));
     if (limit) qs.set("limit", String(limit));
 
-    // 🔹 Only call the title-based route
+    // 🔹 Only call the title-based deal endpoint
     const titleUrl = `${process.env.PYAPI_URL}/deals/by-title?${qs.toString()}`;
     const titleRes = await fetch(titleUrl);
     const payload = await forwardJsonOrText(titleRes);
@@ -179,43 +130,15 @@ router.post("/deals", async (req, res) => {
       return res.status(titleRes.status).json(payload);
     }
 
-    // 🔹 Directly use title-based deals as final output
+    // 🔹 Use title-based deals as the final output
     const deals = Array.isArray(payload.deals) ? payload.deals : [];
 
-    // (Optional) GPT filtering can stay if you want a sanity cleanup
-    let finalDeals = deals;
-    if (finalDeals.length > 0) {
-      try {
-        const completion = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
-          messages: [
-            {
-              role: "system",
-              content:
-                "Filter out irrelevant, mismatched, or invalid deals. Return a JSON array of valid Walmart-vs-Amazon comparisons only.",
-            },
-            {
-              role: "user",
-              content: JSON.stringify(finalDeals),
-            },
-          ],
-        });
-
-        const result = completion.choices[0]?.message?.content || "";
-        const filtered = JSON.parse(result);
-        if (Array.isArray(filtered)) finalDeals = filtered;
-      } catch (e) {
-        console.warn("GPT returned non-JSON — fallback to unfiltered");
-      }
-    }
-
-    return res.status(200).json({ deals: finalDeals });
+    return res.status(200).json({ deals });
   } catch (err) {
     console.error("Proxy error (deals/title-only):", err);
     return res.status(500).json({ error: "Failed to fetch deals" });
   }
 });
-
 
 
 // ───────────────────────────────────────────────────────────────
