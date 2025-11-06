@@ -777,46 +777,6 @@ async def walmart_backfill_links(
 
     return {"wm_coll": wm_coll or WM_COLL, "considered": len(docs), "updated": updated}
 
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Walmart: list items (debug/FE consumption)
-# ──────────────────────────────────────────────────────────────────────────────
-
-@app.get("/walmart/items")
-async def walmart_items(
-    limit: int = Query(30, ge=1, le=500),
-    have_upc: Optional[bool] = Query(None, description="Filter: only items with UPC (true) or without (false)"),
-    q: Optional[str] = Query(None, description="Case-insensitive substring in title"),
-):
-    filt: Dict[str, Any] = {}
-    if have_upc is True:
-        filt["upc"] = {"$exists": True}
-    elif have_upc is False:
-        filt["$or"] = [{"upc": {"$exists": False}}, {"upc": None}, {"upc": ""}]
-
-    if q:
-        filt["title"] = {"$regex": q, "$options": "i"}
-
-    # projection keeps payload light and matches your frontend usage
-    projection = {
-        "_id": 0,
-        "product_id": 1,
-        "title": 1,
-        "brand": 1,
-        "price": 1,
-        "link": 1,
-        "thumbnail": 1,
-        "rating": 1,
-        "reviews": 1,
-        "category": 1,
-        "upc": 1,
-        "updatedAt": 1,
-    }
-
-    cur = db[WM_COLL].find(filt, projection).sort([("updatedAt", -1)]).limit(limit)
-    items = await cur.to_list(length=limit)
-    return {"items": items}
-
 # TO CLEAR THE DATABASE 
 @app.delete("/debug/clear-db")
 async def clear_db():

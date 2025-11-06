@@ -1,11 +1,11 @@
 CMD COMMANDS TO POPULATE:
 API="https://diligent-spontaneity-production-d286.up.railway.app"
-Check API searches remaining: curl -s "https://serpapi.com/search.json?engine=walmart&query=containers&page=1&api_key=$SERPAPI_KEY"
+Check API searches remaining: curl "https://serpapi.com/account?api_key=YOUR_API_KEY"
 
 Scrape:
 curl -s -X POST "$API/walmart/scrape" \
   -H "Content-Type: application/json" \
-  -d '{"query":"containers","pages":3,"max_products":120}' \
+  -d '{"query":"christmas","pages":3,"max_products":120}' \
 
 Enrich with UPC:
 curl -s -X POST "$API/walmart/enrich-upc?limit=300"
