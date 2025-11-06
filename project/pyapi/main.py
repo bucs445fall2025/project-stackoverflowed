@@ -31,7 +31,6 @@ app.add_middleware(
 SERPAPI_KEY = os.getenv("SERPAPI_KEY")
 MONGO_URL   = os.getenv("MONGO_URL")
 MONGO_DB    = os.getenv("MONGO_DB", "MongoDB")
-MATCH_COLL_DEFAULT = os.getenv("MONGO_MATCH_COLLECTION", "wm_amz_matches") #for category <-> category matching
 
 if not MONGO_URL:
     raise RuntimeError("MONGO_URL env var is required")
@@ -43,13 +42,9 @@ db = client[MONGO_DB]
 # ──────────────────────────────────────────────────────────────────────────────
 # Utils
 # ──────────────────────────────────────────────────────────────────────────────
-def _get_colls(wm_coll: Optional[str], amz_coll: Optional[str]):
-    wm_db  = db[wm_coll]  if wm_coll  else db[WM_COLL]
-    amz_db = db[amz_coll] if amz_coll else db[AMZ_COLL]
-    return wm_db, amz_db
 
 def now_utc() -> datetime: return datetime.now(timezone.utc)
-def now_iso() -> str: return now_utc().isoformat()
+
 PRICE_RE = re.compile(r"(\d+(?:\.\d{1,2})?)")
 
 def parse_price(v) -> Optional[float]:
@@ -111,19 +106,7 @@ async def serp_get(url: str, q: dict):
 
 
 # ---- Amazon result hygiene ----
-def is_valid_amz_result(it: dict) -> bool:
-    link = (it.get("link") or "")
-    asin = it.get("asin")
-    title = (it.get("title") or "")
-    # Drop sponsored/redirect/ad and non-PDP
-    if "sspa/click" in link:    # sponsored
-        return False
-    if "/dp/" not in link:      # prefer canonical PDP
-        return False
-    if not asin:
-        return False
-    return len(title.strip()) >= 5
-
+    
 STOPWORDS = {"with","and","the","for","in","of","to","by","on","oz","fl","ct","pack","count","lb","lbs","ounce","ounces"}
 
 def norm(s: str) -> str:
@@ -170,40 +153,6 @@ def sizes_compatible(wm_title: str, amz_title: str, threshold: float = 0.85) -> 
     am_total = am["grams"] * max(1, am["count"])
     ratio = min(wm_total, am_total) / max(wm_total, am_total)
     return ratio >= threshold
-
-def brand_ok(wm_brand: Optional[str], amz_title: str) -> bool:
-    if not wm_brand: return True
-    wb = re.sub(r"[^a-z0-9]+","", wm_brand.lower())
-    at = re.sub(r"[^a-z0-9]+","", (amz_title or "").lower())
-    return len(wb) >= 3 and wb in at
-
-def title_score(wm_title: str, amz_title: str, brand: Optional[str]=None) -> float:
-    base = difflib.SequenceMatcher(None, norm(wm_title), norm(amz_title)).ratio()
-    if brand and brand.lower() in (amz_title or "").lower():
-        base += 0.05
-    return max(0.0, min(base, 1.0))
-
-AMZ_SSP_PAT = "sspa/click"
-
-def clean_amz_link(asin: Optional[str], link: Optional[str]) -> Optional[str]:
-    """
-    Prefer a canonical dp link if we have an ASIN. Also reject sponsored redirect links.
-    """
-    if asin:
-        return f"https://www.amazon.com/dp/{asin}"
-    if link and AMZ_SSP_PAT not in link:
-        return link
-    return None
-
-def brand_norm(s: Optional[str]) -> str:
-    return re.sub(r"[^a-z0-9]+", "", (s or "").lower())
-
-def title_sim(a: str, b: str) -> float:
-    """
-    RapidFuzz token_set_ratio gives robust order/dup handling (0–100).
-    """
-    return float(fuzz.token_set_ratio(a or "", b or ""))
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Walmart ingest
@@ -302,7 +251,7 @@ def _pick_best_amz_by_title(
 
 @app.post("/walmart/scrape")
 async def walmart_scrape(req: WalmartScrapeReq, wm_coll: Optional[str] = Query(None)):
-    WM = wm_coll
+    WM = db[wm_coll]
     inserted = updated = total = 0
     pages_fetched = 0
     page_errors = 0
@@ -387,7 +336,8 @@ async def index_amazon_by_title(
     if not SERPAPI_KEY:
         raise HTTPException(500, "SERPAPI_KEY not set")
 
-    wm_db, amz_db = _get_colls(wm_coll, amz_coll)  # new
+    wm_db = db[wm_coll]
+    amz_db = db[amz_coll]
 
     match: Dict[str, Any] = {"title": {"$exists": True, "$ne": None}}
     if req.kw:
@@ -531,7 +481,9 @@ async def deals_by_title(
     wm_coll: Optional[str] = Query(None),
     amz_coll: Optional[str] = Query(None),
 ):
-    wm_db, amz_db = _get_colls(wm_coll, amz_coll)
+    wm_db = db[wm_coll]
+    amz_db = db[amz_coll]
+
     wm_items = await wm_db.find({}).to_list(length=limit * 5)
     deals = []
     for wm in wm_items:
