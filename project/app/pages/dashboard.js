@@ -98,7 +98,7 @@ export default function Dashboard() {
     setDeals([]);
 
     try {
-      const r = await fetch(`${API_BASE}/api/commerce/matches`, {
+      const r = await fetch(`${API_BASE}/api/commerce/deals`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ category: label }),

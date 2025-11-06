@@ -31,23 +31,23 @@ curl -s "$API/deals/by-title?min_abs=3&min_pct=0.15&min_sim=90&limit=50"
 RUN PYTHON ROUTES FOR CATEGORY TO CATEGORY SCRAPING:
 export PYAPI_URL="https://diligent-spontaneity-production-d286.up.railway.app"
 
-curl -X POST "$PYAPI_URL/walmart/scrape?wm_coll=wm_cleaning_supplies" \
+curl -X POST "$PYAPI_URL/walmart/scrape?wm_coll=wm_christmas" \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "cleaning supplies",
+    "query": "christmas",
+    "pages": 8,
+    "max_products": 400
+  }'
+
+curl -X POST "$PYAPI_URL/amazon/scrape?amz_coll=amz_christmas" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "christmas",
     "pages": 4,
     "max_products": 200
   }'
 
-curl -X POST "$PYAPI_URL/amazon/scrape?amz_coll=amz_cleaning_supplies" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "cleaning supplies",
-    "pages": 4,
-    "max_products": 200
-  }'
-
-curl -X POST "$PYAPI_URL/wm-amz/match?wm_coll=wm_cleaning_supplies&amz_coll=amz_cleaning_supplies&match_coll=match_cleaning_supplies" \
+curl -X POST "$PYAPI_URL/wm-amz/match?wm_coll=wm_christmas&amz_coll=amz_christmas&match_coll=match_christmas" \
   -H "Content-Type: application/json" \
   -d '{
     "max_wm_items": 400,
