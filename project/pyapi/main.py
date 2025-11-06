@@ -12,7 +12,6 @@ from urllib.parse import quote_plus #used for building walmart links
 # Setup
 # ──────────────────────────────────────────────────────────────────────────────
 app = FastAPI(title="Walmart vs Amazon Deals (UPC-first)")
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,7 +19,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 SERPAPI_KEY = os.getenv("SERPAPI_KEY")
 MONGO_URL   = os.getenv("MONGO_URL")
 MONGO_DB    = os.getenv("MONGO_DB", "MongoDB")
@@ -31,13 +29,33 @@ if not MONGO_URL:
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[MONGO_DB]
 
+class WalmartScrapeReq(BaseModel):
+    query: str
+    pages: int = Field(1, ge=1, le=10)
+    max_products: int = 100
+
+class IndexAmazonByTitleReq(BaseModel):
+    category: Optional[str] = None          # optional Walmart category filter
+    kw: Optional[str] = None                # optional title keyword filter
+    limit_items: int = 400                  # how many Walmart items to consider
+    recache_hours: int = 48                 # skip re-fetching recent cache
+    max_serp_calls: int = 200               # hard cap on SerpAPI calls this run
+    min_similarity: int = 86                # RapidFuzz token_set_ratio threshold (0..100)
+    require_brand: bool = True              # if Walmart brand is known, require the brand to appear in Amazon title
+    per_call_delay_ms: int = 350            # throttle to avoid SerpAPI 429s
+
+PRICE_RE = re.compile(r"(\d+(?:\.\d{1,2})?)")
+STOPWORDS = {"with","and","the","for","in","of","to","by","on","oz","fl","ct","pack","count","lb","lbs","ounce","ounces"}
+SIZE_RE = re.compile(
+    r"(?:(\d+(?:\.\d+)?)\s*(lb|lbs|pound|pounds|oz|ounce|ounces|kg|g|gram|grams|ml|l|liter|liters))"
+    r"|(?:pack\s*of\s*(\d+)|(\d+)\s*ct|\b(\d+)-?pack\b)",
+    re.I,
+)
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Utils
 # ──────────────────────────────────────────────────────────────────────────────
-
 def now_utc() -> datetime: return datetime.now(timezone.utc)
-
-PRICE_RE = re.compile(r"(\d+(?:\.\d{1,2})?)")
 
 def parse_price(v) -> Optional[float]:
     if v is None: return None
@@ -98,20 +116,11 @@ async def serp_get(url: str, q: dict):
 
 
 # ---- Amazon result hygiene ----
-    
-STOPWORDS = {"with","and","the","for","in","of","to","by","on","oz","fl","ct","pack","count","lb","lbs","ounce","ounces"}
-
 def norm(s: str) -> str:
     if not s: return ""
     s = re.sub(r"[^a-z0-9 ]+", " ", s.lower())
     toks = [t for t in s.split() if t and t not in STOPWORDS]
     return " ".join(toks)
-
-SIZE_RE = re.compile(
-    r"(?:(\d+(?:\.\d+)?)\s*(lb|lbs|pound|pounds|oz|ounce|ounces|kg|g|gram|grams|ml|l|liter|liters))"
-    r"|(?:pack\s*of\s*(\d+)|(\d+)\s*ct|\b(\d+)-?pack\b)",
-    re.I,
-)
 
 def _to_grams(val: float, unit: str) -> Optional[float]:
     u = unit.lower()
@@ -162,20 +171,6 @@ async def walmart_search_page(query: str, page: int = 1):
             "no_cache": "true",
         },
     )
-class WalmartScrapeReq(BaseModel):
-    query: str
-    pages: int = Field(1, ge=1, le=10)
-    max_products: int = 100
-
-class IndexAmazonByTitleReq(BaseModel):
-    category: Optional[str] = None          # optional Walmart category filter
-    kw: Optional[str] = None                # optional title keyword filter
-    limit_items: int = 400                  # how many Walmart items to consider
-    recache_hours: int = 48                 # skip re-fetching recent cache
-    max_serp_calls: int = 200               # hard cap on SerpAPI calls this run
-    min_similarity: int = 86                # RapidFuzz token_set_ratio threshold (0..100)
-    require_brand: bool = True              # if Walmart brand is known, require the brand to appear in Amazon title
-    per_call_delay_ms: int = 350            # throttle to avoid SerpAPI 429s
 
 def _norm_brand(b: Optional[str]) -> Optional[str]:
     if not b:
