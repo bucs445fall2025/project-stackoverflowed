@@ -25,7 +25,7 @@ const userRoutes = require("./routes/userRoutes"); // Importing user routes
 app.use("/api/users", userRoutes); // Mounts them under /api/users
 
 // Health check
-app.get("/", (_req, res) => res.send("Backend running ✅"));
+app.get("/", (_req, res) => res.send("Backend running"));
 
 // Global error handler
 app.use((err, req, res, next) => {
