@@ -38,10 +38,9 @@ We have a landing page, signup and login system with a MongoDB database. Users c
 
 ## Requirements Flex
 
-4/5 requirement flexes remaining
+5/5 requirement flexes remaining
 
 ## Technical Debt
-Implement the verification logic in the account creation page, and research account recovery functionality
 
 ### Requirement Target
 Implement a feature for product matching that uses an opposite flow of what we have now. 
