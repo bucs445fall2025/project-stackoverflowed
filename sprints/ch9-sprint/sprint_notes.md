@@ -12,7 +12,7 @@
 
 ### SRS Sections Updated
 
-<< List any SRS sections that were updated in the last sprint >>
+Added Known Bugs section
 
 ### User Story
 User Story 1 and User Story 4
