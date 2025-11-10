@@ -8,14 +8,11 @@ const app = express();
 app.use(cors({ origin: "*" }));
 app.use(express.json());
 
-// ✅ Direct top-level auth/SP-API routes
-const amazonController = require("./controllers/amazonController");
-app.get("/auth/login", amazonController.login);
-app.get("/auth/callback", amazonController.callback);
-app.get("/spapi/sandbox-check", amazonController.sandboxCheck);
-app.get("/spapi/products", amazonController.sandboxCheck);
+// Amazon auth + SP-API routes
+const amazonRoutes = require("./routes/amazonRoutes");
+app.use("/", amazonRoutes); // All /auth and /spapi routes are defined inside amazonRoutes
 
-// ✅ All commerce data scraping + deals stay grouped
+// All commerce data scraping + deals stay grouped
 const commerceRoutes = require("./routes/commerceRoutes");
 app.use("/api/commerce", commerceRoutes);
 
