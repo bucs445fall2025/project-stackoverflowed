@@ -10,19 +10,19 @@ app.use(express.json());
 
 // Amazon auth + SP-API routes
 const amazonRoutes = require("./routes/amazonRoutes");
-app.use("/", amazonRoutes); // All /auth and /spapi routes are defined inside amazonRoutes
+app.use("/", amazonRoutes); // /auth/* and /spapi/*
 
-// All commerce data scraping + deals stay grouped
+// All commerce data scraping + deals
 const commerceRoutes = require("./routes/commerceRoutes");
 app.use("/api/commerce", commerceRoutes);
 
-// Debug tools
-app.use("/api", require("./routes/dbDebug"));
-app.use("/api", require("./routes/usersDebug"));
+// Debug tools (DB + users debug)
+const debugRoutes = require("./routes/debugRoutes");
+app.use("/api", debugRoutes); // /api/db/debug, /api/users/debug, /api/users/exists
 
-//User routes
-const userRoutes = require("./routes/userRoutes"); // Importing user routes
-app.use("/api/users", userRoutes); // Mounts them under /api/users
+// User auth routes
+const userRoutes = require("./routes/userRoutes");
+app.use("/api/users", userRoutes);
 
 // Health check
 app.get("/", (_req, res) => res.send("Backend running"));
