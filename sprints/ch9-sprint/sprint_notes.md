@@ -12,7 +12,7 @@
 
 ### SRS Sections Updated
 
-Section 2: Functional requirements (FRs and NFRs)
+Added Known Bugs section
 
 ### User Story
 User Story 1 and User Story 4
