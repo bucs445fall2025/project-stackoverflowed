@@ -37,6 +37,18 @@ export default function Signup() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    const passwordValid =
+    /^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*#?&])[A-Za-z\d@$!%*#?&]{8,}$/.test(
+      formData.password
+    );
+
+    if (!passwordValid) {
+      setMessage(
+        "Password must be at least 8 characters and include a number and special character."
+      );
+      return;
+    }
+
     if (formData.password !== formData.confirmPassword) {
       setMessage("Passwords do not match.");
       return;
