@@ -89,22 +89,17 @@ export default function Dashboard() {
       <main className="content">
         <div className="card">
           {/* Tab navigation */}
-          <div className="tab-shell">
-            <nav className="tab-nav">
-              <Link href="/dashboard" className="tab-btn active">
-                <span className="tab-dot" />
-                Product Finder
-              </Link>
-              <Link href="/amazon-dashboard" className="tab-btn">
-                <span className="tab-dot" />
-                Amazon Dashboard
-              </Link>
-              <Link href="/chat-bot" className="tab-btn">
-                <span className="tab-dot" />
-                Chat Bot
-              </Link>
-            </nav>
-          </div>
+          <nav className="tab-row">
+            <Link href="/dashboard" className="tab-pill active">
+              <span className="tab-label">Product Finder</span>
+            </Link>
+            <Link href="/amazon-dashboard" className="tab-pill">
+              <span className="tab-label">Amazon Dashboard</span>
+            </Link>
+            <Link href="/chat-bot" className="tab-pill">
+              <span className="tab-label">Chat Bot</span>
+            </Link>
+          </nav>
 
           <h1 className={`${spaceGrotesk.className} title`}>Product Finder</h1>
           <p className="subtitle">
@@ -322,53 +317,97 @@ export default function Dashboard() {
           padding: 24px;
         }
 
-        /* Tab nav */
-        .tab-shell {
-          border-radius: 999px;
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          padding: 4px;
-          background: radial-gradient(circle at top left, rgba(255, 255, 255, 0.08), transparent),
-            rgba(6, 5, 20, 0.75);
-          margin-bottom: 1.2rem;
-        }
-        .tab-nav {
+        /* Tab row – pill buttons with orbiting border */
+        .tab-row {
           display: flex;
-          gap: 0.35rem;
+          gap: 0.5rem;
+          margin-bottom: 1.2rem;
+          flex-wrap: wrap;
         }
-        .tab-btn {
+
+        .tab-pill {
           position: relative;
-          flex: 0 0 auto;
-          padding: 8px 14px 8px 24px;
-          border-radius: 999px;
-          font-size: 0.85rem;
-          text-decoration: none;
-          color: rgba(255, 255, 255, 0.78);
-          background: rgba(255, 255, 255, 0.04);
-          border: 1px solid rgba(255, 255, 255, 0.08);
           display: inline-flex;
           align-items: center;
-          gap: 6px;
-          cursor: pointer;
-          transition: background 0.2s, color 0.2s, box-shadow 0.2s, transform 0.15s;
-        }
-        .tab-btn .tab-dot {
-          width: 6px;
-          height: 6px;
+          justify-content: center;
+          padding: 8px 18px;
           border-radius: 999px;
-          background: rgba(255, 255, 255, 0.4);
+          background: rgba(15, 23, 42, 0.85);
+          border: 1px solid rgba(148, 163, 184, 0.45);
+          cursor: pointer;
+          text-decoration: none;
+          color: rgba(248, 250, 252, 0.8);
+          font-size: 0.85rem;
+          letter-spacing: 0.03em;
+          text-transform: uppercase;
+          overflow: hidden;
+          transition:
+            background 0.2s ease-out,
+            color 0.2s ease-out,
+            box-shadow 0.2s ease-out,
+            transform 0.15s ease-out;
         }
-        .tab-btn.active .tab-dot {
-          background: #a5b4fc;
+
+        /* active pill background */
+        .tab-pill.active {
+          background: radial-gradient(circle at top left, #a855f7, #4c1d95);
+          color: #f9fafb;
+          border-color: rgba(216, 180, 254, 0.8);
         }
-        .tab-btn:hover {
+
+        /* label inside pill */
+        .tab-label {
+          position: relative; /* keep above the animated border layer */
+          z-index: 1;
+        }
+
+        /* animated orbiting border */
+        .tab-pill::before {
+          content: "";
+          position: absolute;
+          inset: -1px;
+          border-radius: inherit;
+          padding: 1px; /* border thickness */
+          background: conic-gradient(
+            from 0deg,
+            #f9a8ff,
+            #a5b4fc,
+            #7dd3fc,
+            #f97316,
+            #f9a8ff
+          );
+          /* show only the ring, not the fill */
+          -webkit-mask:
+            linear-gradient(#000 0 0) content-box,
+            linear-gradient(#000 0 0);
+          -webkit-mask-composite: xor;
+          mask-composite: exclude;
+          opacity: 0;
+          transform: rotate(0deg);
+          transition: opacity 0.2s ease-out;
+          z-index: 0;
+        }
+
+        /* hover & active: turn the border on + spin it */
+        .tab-pill:hover::before,
+        .tab-pill.active::before {
+          opacity: 1;
+          animation: snakeOrbit 1.6s linear infinite;
+        }
+
+        .tab-pill:hover {
           transform: translateY(-1px);
-          box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
+          box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
         }
-        .tab-btn.active {
-          background: linear-gradient(90deg, #8a2be2, #5b21b6);
-          color: #fff;
-          border-color: transparent;
+
+        /* keyframes for the “snake” border */
+        @keyframes snakeOrbit {
+          to {
+            transform: rotate(360deg);
+          }
         }
+
+        
 
         .title {
           font-weight: 700;
