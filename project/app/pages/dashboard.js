@@ -446,66 +446,34 @@ export default function Dashboard() {
           transition: transform 0.15s ease-out, box-shadow 0.15s ease-out;
           overflow: hidden; /* clip animated border glow to rounded corners */
         }
-
-        /* animated “snaking” border layer */
-        .product-row::before {
-          content: "";
-          position: absolute;
-          inset: -1px;
-          border-radius: inherit;
-          padding: 1px;
-          background: conic-gradient(
-            from 0deg,
-            rgba(255, 255, 255, 0.0) 0deg,
-            rgba(255, 255, 255, 0.4) 40deg,
-            rgba(255, 255, 255, 0.9) 80deg,
-            rgba(255, 255, 255, 0.0) 120deg,
-            rgba(255, 255, 255, 0.0) 360deg
-          );
-          -webkit-mask:
-            linear-gradient(#000 0 0) content-box,
-            linear-gradient(#000 0 0);
-          -webkit-mask-composite: xor;
-          mask-composite: exclude;
-          opacity: 0;
-          transform: rotate(0deg);
-          transition: opacity 0.15s ease-out;
-          pointer-events: none;
-          z-index: 0;
+        .product-row {
+          position: relative;
+          border-radius: 18px;
+          background: linear-gradient(
+              135deg,
+              rgba(167, 139, 250, 0.09),
+              rgba(15, 23, 42, 0.85)
+            );
+          border: 1px solid rgba(255, 255, 255, 0.1); /* subtle by default */
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+          padding: 12px 14px 14px;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          transition:
+            border-color 0.18s ease-out,
+            box-shadow 0.18s ease-out,
+            transform 0.15s ease-out;
+          overflow: hidden;
         }
-
-        /* solid white border that “finishes” after the snake */
-        .product-row::after {
-          content: "";
-          position: absolute;
-          inset: -1px;
-          border-radius: inherit;
-          border: 1px solid rgba(248, 250, 252, 0.9);
-          opacity: 0;
-          transition: opacity 0.45s ease-out 0.9s; /* delay to let snake run ~1s first */
-          pointer-events: none;
-          z-index: 0;
-        }
-
+        
         .product-row:hover {
+          border-color: rgba(255, 255, 255, 0.95); /* solid white border on hover */
           transform: translateY(-3px);
           box-shadow: 0 14px 35px rgba(0, 0, 0, 0.55);
         }
-
-        .product-row:hover::before {
-          opacity: 1;
-          animation: productSnakeOrbit 1.5s linear infinite;
-        }
-
-        .product-row:hover::after {
-          opacity: 1; /* fades in to solid border */
-        }
-
-        @keyframes productSnakeOrbit {
-          to {
-            transform: rotate(360deg);
-          }
-        }
+        
+       
 
         .row-header {
           position: relative;
