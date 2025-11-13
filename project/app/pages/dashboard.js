@@ -18,7 +18,6 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export default function Dashboard() {
-  // Category labels (frontend only; server maps label -> collections)
   const CATEGORY_LABELS = [
     "Electronics",
     "Health & Wellness",
@@ -35,13 +34,11 @@ export default function Dashboard() {
     "Christmas",
   ];
 
-  // Deals (dropdown only)
   const [deals, setDeals] = useState([]);
   const [dealsLoading, setDealsLoading] = useState(false);
   const [dealsMsg, setDealsMsg] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
 
-  // Fallback thumbnail
   const FALLBACK_SVG =
     "data:image/svg+xml;utf8," +
     encodeURIComponent(`
@@ -54,7 +51,6 @@ export default function Dashboard() {
       </svg>
     `);
 
-  // Fetch deals by category label; backend maps label -> collections safely
   const fetchDealsByCategory = async (label) => {
     if (!label) return;
     setDealsLoading(true);
@@ -92,17 +88,22 @@ export default function Dashboard() {
 
       <main className="content">
         <div className="card">
-          {/* Top nav tabs */}
-          <div className="tab-bar">
-            <Link href="/dashboard" className="tab active">
-              Product Finder
-            </Link>
-            <Link href="/amazon-dashboard" className="tab">
-              Amazon Dashboard
-            </Link>
-            <Link href="/chat-bot" className="tab">
-              Chat Bot
-            </Link>
+          {/* Tab navigation */}
+          <div className="tab-shell">
+            <nav className="tab-nav">
+              <Link href="/dashboard" className="tab-btn active">
+                <span className="tab-dot" />
+                Product Finder
+              </Link>
+              <Link href="/amazon-dashboard" className="tab-btn">
+                <span className="tab-dot" />
+                Amazon Dashboard
+              </Link>
+              <Link href="/chat-bot" className="tab-btn">
+                <span className="tab-dot" />
+                Chat Bot
+              </Link>
+            </nav>
           </div>
 
           <h1 className={`${spaceGrotesk.className} title`}>Product Finder</h1>
@@ -159,7 +160,6 @@ export default function Dashboard() {
           {dealsMsg && <div className="status">{dealsMsg}</div>}
           {dealsLoading && <div className="status">Loading deals…</div>}
 
-          {/* Product rows */}
           <div className="product-rows">
             {deals.map((d, i) => {
               const wm = d.wm || {};
@@ -168,113 +168,111 @@ export default function Dashboard() {
               const wmPrice = Number(wm.price ?? 0);
               const amzPrice = Number(amz.price ?? 0);
 
-              const roi =
-                wmPrice > 0 ? ((amzPrice - wmPrice) / wmPrice) * 100 : 0;
-
-              // keep behavior similar to old badge: only show when ROI is solid
-              const showBadge = roi >= 20;
+              const roi = wmPrice > 0 ? ((amzPrice - wmPrice) / wmPrice) * 100 : 0;
+              const diff = amzPrice - wmPrice;
 
               const wmThumb = wm.thumbnail || FALLBACK_SVG;
               const amzThumb = amz.thumbnail || FALLBACK_SVG;
+
+              const roiClass =
+                roi > 0 ? "roi-pill positive" : roi < 0 ? "roi-pill negative" : "roi-pill neutral";
 
               return (
                 <div
                   className="product-row"
                   key={`${wm.product_id || amz.asin || wm.link || i}`}
                 >
-                  {/* Left: images + ROI badge */}
-                  <div className="product-media">
-                    <div className="thumb-pair">
-                      <div className="thumb-wrap small">
-                        <img
-                          src={wmThumb}
-                          alt={wm.title || "Walmart product"}
-                          loading="lazy"
-                          referrerPolicy="no-referrer"
-                          onError={(e) => {
-                            e.currentTarget.src = FALLBACK_SVG;
-                          }}
-                        />
-                        <span className="thumb-label">Walmart</span>
-                      </div>
-
-                      <div className="thumb-wrap small">
-                        <img
-                          src={amzThumb}
-                          alt={amz.title || "Amazon product"}
-                          loading="lazy"
-                          referrerPolicy="no-referrer"
-                          onError={(e) => {
-                            e.currentTarget.src = FALLBACK_SVG;
-                          }}
-                        />
-                        <span className="thumb-label">Amazon</span>
-                      </div>
+                  {/* Row header: ROI & summary */}
+                  <div className="row-header">
+                    <div className={roiClass}>{roi.toFixed(1)}% ROI</div>
+                    <div className="row-header-meta">
+                      Difference:{" "}
+                      <span className="strong">
+                        ${diff.toFixed(2)}
+                      </span>
                     </div>
-
-                    {showBadge && (
-                      <div className="badge">
-                        {roi.toFixed(1)}% ROI
-                      </div>
-                    )}
                   </div>
 
-                  {/* Right: text + prices stacked Walmart then Amazon */}
-                  <div className="product-info">
-                    {/* Walmart block */}
-                    <div className="side-block">
-                      <div className="side-header">Walmart</div>
-                      <a
-                        className="deal-title"
-                        href={wm.link || "#"}
-                        target="_blank"
-                        rel="noreferrer"
-                        title={wm.title}
-                      >
-                        {wm.title || "Untitled Walmart product"}
-                      </a>
-                      <div className="row">
-                        <span className="label">Price</span>
-                        <span className="price">
-                          ${wmPrice.toFixed(2)}
-                        </span>
+                  <div className="row-body">
+                    {/* Left: images */}
+                    <div className="product-media">
+                      <div className="thumb-pair">
+                        <div className="thumb-wrap small">
+                          <img
+                            src={wmThumb}
+                            alt={wm.title || "Walmart product"}
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                            onError={(e) => {
+                              e.currentTarget.src = FALLBACK_SVG;
+                            }}
+                          />
+                          <span className="thumb-label">Walmart</span>
+                        </div>
+
+                        <div className="thumb-wrap small">
+                          <img
+                            src={amzThumb}
+                            alt={amz.title || "Amazon product"}
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                            onError={(e) => {
+                              e.currentTarget.src = FALLBACK_SVG;
+                            }}
+                          />
+                          <span className="thumb-label">Amazon</span>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Amazon block */}
-                    <div className="side-block">
-                      <div className="side-header">Amazon</div>
-                      <a
-                        className="deal-title"
-                        href={amz.link || "#"}
-                        target="_blank"
-                        rel="noreferrer"
-                        title={amz.title}
-                      >
-                        {amz.title || "Untitled Amazon product"}
-                      </a>
-                      <div className="row">
-                        <span className="label">Price</span>
-                        <span className="price">
-                          ${amzPrice.toFixed(2)}
-                        </span>
+                    {/* Right: text + prices */}
+                    <div className="product-info">
+                      {/* Walmart block */}
+                      <div className="side-block">
+                        <div className="side-header">WALMART</div>
+                        <a
+                          className="deal-title"
+                          href={wm.link || "#"}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={wm.title}
+                        >
+                          {wm.title || "Untitled Walmart product"}
+                        </a>
+                        <div className="row price-row">
+                          <span className="label">Price</span>
+                          <span className="price">${wmPrice.toFixed(2)}</span>
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Summary row */}
-                    <div className="summary-row">
-                      <span>
-                        Difference:{" "}
-                        <strong>
-                          ${(amzPrice - wmPrice).toFixed(2)}
-                        </strong>
-                      </span>
-                      <span>
-                        ROI:{" "}
-                        <strong>
-                          {roi.toFixed(1)}%
-                        </strong>
-                      </span>
+                      {/* Amazon block */}
+                      <div className="side-block">
+                        <div className="side-header">AMAZON</div>
+                        <a
+                          className="deal-title"
+                          href={amz.link || "#"}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={amz.title}
+                        >
+                          {amz.title || "Untitled Amazon product"}
+                        </a>
+                        <div className="row price-row">
+                          <span className="label">Price</span>
+                          <span className="price">${amzPrice.toFixed(2)}</span>
+                        </div>
+                      </div>
+
+                      {/* Meta line */}
+                      <div className="meta-row">
+                        <span>
+                          Category:{" "}
+                          {wm.category || selectedCategory || "—"}
+                        </span>
+                        {amz.sim != null && (
+                          <span>Match score: {Number(amz.sim).toFixed(0)}</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -324,26 +322,49 @@ export default function Dashboard() {
           padding: 24px;
         }
 
-        .tab-bar {
-          display: flex;
-          gap: 0.5rem;
-          margin-bottom: 1rem;
-        }
-        .tab {
-          padding: 8px 14px;
+        /* Tab nav */
+        .tab-shell {
           border-radius: 999px;
-          font-size: 0.9rem;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          padding: 4px;
+          background: radial-gradient(circle at top left, rgba(255, 255, 255, 0.08), transparent),
+            rgba(6, 5, 20, 0.75);
+          margin-bottom: 1.2rem;
+        }
+        .tab-nav {
+          display: flex;
+          gap: 0.35rem;
+        }
+        .tab-btn {
+          position: relative;
+          flex: 0 0 auto;
+          padding: 8px 14px 8px 24px;
+          border-radius: 999px;
+          font-size: 0.85rem;
           text-decoration: none;
-          color: rgba(255, 255, 255, 0.8);
-          background: rgba(255, 255, 255, 0.06);
+          color: rgba(255, 255, 255, 0.78);
+          background: rgba(255, 255, 255, 0.04);
           border: 1px solid rgba(255, 255, 255, 0.08);
-          transition: background 0.2s, color 0.2s, transform 0.15s, box-shadow 0.15s;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          cursor: pointer;
+          transition: background 0.2s, color 0.2s, box-shadow 0.2s, transform 0.15s;
         }
-        .tab:hover {
+        .tab-btn .tab-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.4);
+        }
+        .tab-btn.active .tab-dot {
+          background: #a5b4fc;
+        }
+        .tab-btn:hover {
           transform: translateY(-1px);
-          box-shadow: 0 6px 15px rgba(0, 0, 0, 0.25);
+          box-shadow: 0 6px 15px rgba(0, 0, 0, 0.3);
         }
-        .tab.active {
+        .tab-btn.active {
           background: linear-gradient(90deg, #8a2be2, #5b21b6);
           color: #fff;
           border-color: transparent;
@@ -377,33 +398,86 @@ export default function Dashboard() {
           gap: 14px;
         }
         .product-row {
-          display: grid;
-          grid-template-columns: minmax(0, 260px) minmax(0, 1fr);
-          gap: 16px;
-          padding: 14px 16px;
-          border-radius: 14px;
-          background: rgba(255, 255, 255, 0.04);
-          border: 1px solid var(--panel-border);
-        }
-
-        .product-media {
-          position: relative;
+          border-radius: 18px;
+          background: linear-gradient(
+              135deg,
+              rgba(167, 139, 250, 0.09),
+              rgba(15, 23, 42, 0.85)
+            );
+          border: 1px solid rgba(255, 255, 255, 0.06);
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+          padding: 12px 14px 14px;
           display: flex;
           flex-direction: column;
           gap: 10px;
+          transition: transform 0.15s ease-out, box-shadow 0.15s ease-out;
+        }
+        .product-row:hover {
+          transform: translateY(-3px);
+          box-shadow: 0 14px 35px rgba(0, 0, 0, 0.55);
         }
 
+        .row-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 8px;
+          padding-bottom: 4px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        .row-header-meta {
+          font-size: 0.85rem;
+          opacity: 0.9;
+        }
+        .row-header-meta .strong {
+          font-weight: 700;
+        }
+
+        .row-body {
+          display: grid;
+          grid-template-columns: minmax(0, 260px) minmax(0, 1fr);
+          gap: 16px;
+          margin-top: 6px;
+        }
+
+        .roi-pill {
+          padding: 4px 10px;
+          border-radius: 999px;
+          font-size: 0.8rem;
+          font-weight: 800;
+          border: 1px solid transparent;
+        }
+        .roi-pill.positive {
+          background: rgba(34, 197, 94, 0.14);
+          border-color: rgba(34, 197, 94, 0.5);
+          color: #bbf7d0;
+        }
+        .roi-pill.negative {
+          background: rgba(239, 68, 68, 0.14);
+          border-color: rgba(248, 113, 113, 0.5);
+          color: #fecaca;
+        }
+        .roi-pill.neutral {
+          background: rgba(148, 163, 184, 0.14);
+          border-color: rgba(148, 163, 184, 0.5);
+          color: #e5e7eb;
+        }
+
+        .product-media {
+          display: flex;
+          align-items: center;
+        }
         .thumb-pair {
           display: flex;
           flex-direction: column;
           gap: 10px;
+          width: 100%;
         }
-
         .thumb-wrap.small {
           position: relative;
-          background: #fff;
-          border-radius: 10px;
-          padding: 6px;
+          background: radial-gradient(circle at top, #ffffff, #e5e7eb);
+          border-radius: 14px;
+          padding: 8px;
           display: grid;
           place-items: center;
           overflow: hidden;
@@ -416,44 +490,32 @@ export default function Dashboard() {
         }
         .thumb-label {
           position: absolute;
-          bottom: 4px;
-          left: 6px;
+          bottom: 6px;
+          left: 8px;
           font-size: 0.7rem;
           font-weight: 700;
-          background: rgba(0, 0, 0, 0.6);
+          background: rgba(15, 23, 42, 0.8);
           padding: 2px 6px;
           border-radius: 999px;
-        }
-
-        .badge {
-          align-self: flex-start;
-          background: #22c55e;
-          color: #06260d;
-          font-weight: 800;
-          padding: 6px 10px;
-          border-radius: 999px;
-          font-size: 0.8rem;
-          border: 1px solid rgba(0, 0, 0, 0.15);
         }
 
         .product-info {
           display: flex;
           flex-direction: column;
-          gap: 10px;
+          gap: 8px;
         }
-
         .side-block {
           background: var(--panel-bg);
-          border-radius: 10px;
+          border-radius: 12px;
           border: 1px solid var(--panel-border);
           padding: 8px 10px;
         }
         .side-header {
-          font-size: 0.8rem;
+          font-size: 0.75rem;
           text-transform: uppercase;
-          letter-spacing: 0.08em;
-          opacity: 0.75;
-          margin-bottom: 4px;
+          letter-spacing: 0.18em;
+          opacity: 0.7;
+          margin-bottom: 3px;
         }
 
         .deal-title {
@@ -466,9 +528,11 @@ export default function Dashboard() {
           -webkit-line-clamp: 2;
           -webkit-box-orient: vertical;
           overflow: hidden;
+          transition: color 0.15s ease-out, text-shadow 0.15s ease-out;
         }
         .deal-title:hover {
-          text-decoration: underline;
+          color: #e9d5ff;
+          text-shadow: 0 0 8px rgba(167, 139, 250, 0.45);
         }
 
         .row {
@@ -479,6 +543,10 @@ export default function Dashboard() {
           font-size: 0.9rem;
           margin-top: 4px;
         }
+        .price-row .price {
+          font-size: 1.02rem;
+          color: #c7d2fe;
+        }
         .label {
           opacity: 0.82;
           letter-spacing: 0.02em;
@@ -487,35 +555,32 @@ export default function Dashboard() {
           font-weight: 900;
         }
 
-        .summary-row {
+        .meta-row {
+          margin-top: 4px;
+          font-size: 0.8rem;
+          opacity: 0.85;
           display: flex;
           justify-content: space-between;
-          font-size: 0.86rem;
-          margin-top: 4px;
-          opacity: 0.9;
+          gap: 10px;
         }
 
         @media (max-width: 860px) {
-          .product-row {
+          .row-body {
             grid-template-columns: 1fr;
           }
           .product-media {
-            flex-direction: row;
-            justify-content: space-between;
+            justify-content: flex-start;
           }
           .thumb-pair {
-            flex-direction: row;
+            max-width: 260px;
           }
         }
 
         @media (max-width: 600px) {
-          .product-media {
-            flex-direction: column;
+          .product-row {
+            padding: 10px 10px 12px;
           }
-          .thumb-pair {
-            flex-direction: column;
-          }
-          .summary-row {
+          .meta-row {
             flex-direction: column;
             gap: 2px;
           }
