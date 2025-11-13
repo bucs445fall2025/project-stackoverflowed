@@ -1,14 +1,13 @@
 // pages/dashboard.js  (or app/dashboard/page.js)
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import dynamic from "next/dynamic";
-import Products from "./products";
+import Link from "next/link";
 import { Space_Grotesk } from "next/font/google";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_BACKEND_URL ||
   "https://feisty-renewal-production.up.railway.app";
 
-// Load StarsBackground only on client
 const StarsBackground = dynamic(() => import("../components/StarsBackground"), {
   ssr: false,
 });
@@ -19,11 +18,6 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export default function Dashboard() {
-  const [status, setStatus] = useState("Not linked");
-  const [error, setError] = useState(null);
-  const [checkResult, setCheckResult] = useState(null);
-  const [checking, setChecking] = useState(false);
-
   // Category labels (frontend only; server maps label -> collections)
   const CATEGORY_LABELS = [
     "Electronics",
@@ -38,7 +32,7 @@ export default function Dashboard() {
     "Hair Care",
     "Spices",
     "non perishable food",
-    "Christmas"
+    "Christmas",
   ];
 
   // Deals (dropdown only)
@@ -59,36 +53,6 @@ export default function Dashboard() {
         </text>
       </svg>
     `);
-
-  // Sandbox check
-  const runSandboxCheck = async () => {
-    setChecking(true);
-    setError(null);
-    setStatus("Contacting Amazon sandbox…");
-    try {
-      const res = await fetch(`${API_BASE}/spapi/sandbox-check`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Sandbox check failed");
-      setCheckResult(data);
-      setStatus("Sandbox linked ✅");
-    } catch (e) {
-      setError(e.message);
-      setStatus("Failed to link sandbox ❌");
-    } finally {
-      setChecking(false);
-    }
-  };
-
-  // After OAuth
-  useEffect(() => {
-    if (typeof window !== "undefined" && (window.location.search || window.location.hash)) {
-      runSandboxCheck();
-    }
-  }, []);
-
-  const handleLinkFBA = () => {
-    window.location.href = `${API_BASE}/auth/login`;
-  };
 
   // Fetch deals by category label; backend maps label -> collections safely
   const fetchDealsByCategory = async (label) => {
@@ -116,7 +80,6 @@ export default function Dashboard() {
     }
   };
 
-  // When user selects a category, fetch deals immediately
   const onCategoryChange = (e) => {
     const cat = e.target.value;
     setSelectedCategory(cat);
@@ -129,44 +92,26 @@ export default function Dashboard() {
 
       <main className="content">
         <div className="card">
-          <h1 className={`${spaceGrotesk.className} title`}>Dashboard</h1>
-          <p className="subtitle">Welcome back — link your Amazon Seller (FBA) account to continue.</p>
-
-          <div className="actions">
-            <button className="primary" onClick={handleLinkFBA}>
-              Link FBA Account
-            </button>
-            <button className="secondary" onClick={runSandboxCheck} disabled={checking}>
-              {checking ? "Checking…" : "Refresh Sandbox Check"}
-            </button>
+          {/* Top nav tabs */}
+          <div className="tab-bar">
+            <Link href="/dashboard" className="tab active">
+              Product Finder
+            </Link>
+            <Link href="/amazon-dashboard" className="tab">
+              Amazon Dashboard
+            </Link>
+            <Link href="/chat-bot" className="tab">
+              Chat Bot
+            </Link>
           </div>
 
-          <div className="status">
-            <strong>Status:</strong> {status}
-          </div>
-          {error && <pre className="error">{error}</pre>}
+          <h1 className={`${spaceGrotesk.className} title`}>Product Finder</h1>
+          <p className="subtitle">
+            Compare Walmart vs Amazon products, images, and pricing in one place.
+          </p>
 
-          {checkResult && (
-            <details className="details">
-              <summary>Sandbox check payload</summary>
-              <pre>{JSON.stringify(checkResult, null, 2)}</pre>
-            </details>
-          )}
-        </div>
-
-        {checkResult && (
-          <div className="products-card">
-            <h2 className={`${spaceGrotesk.className} products-title`}>Your Products (Sandbox)</h2>
-            <Products apiBase={API_BASE} />
-          </div>
-        )}
-
-        {/* Deals finder (Dropdown only) */}
-        <div className="card">
-          <h2 className={`${spaceGrotesk.className} products-title`}>Find Deals (Walmart vs Amazon)</h2>
-          <p className="subtitle">Choose a category to fetch example deals.</p>
-
-          <div className="actions" style={{ alignItems: "center" }}>
+          {/* Category selector */}
+          <div className="actions" style={{ alignItems: "center", marginTop: "0.5rem" }}>
             <label
               style={{
                 display: "flex",
@@ -191,11 +136,19 @@ export default function Dashboard() {
                   MozAppearance: "none",
                 }}
               >
-                <option value="" disabled style={{ background: "#151020", color: "#fff" }}>
+                <option
+                  value=""
+                  disabled
+                  style={{ background: "#151020", color: "#fff" }}
+                >
                   Select a category…
                 </option>
                 {CATEGORY_LABELS.map((label) => (
-                  <option key={label} value={label} style={{ background: "#151020", color: "#fff" }}>
+                  <option
+                    key={label}
+                    value={label}
+                    style={{ background: "#151020", color: "#fff" }}
+                  >
                     {label}
                   </option>
                 ))}
@@ -206,52 +159,122 @@ export default function Dashboard() {
           {dealsMsg && <div className="status">{dealsMsg}</div>}
           {dealsLoading && <div className="status">Loading deals…</div>}
 
-          <div className="deals-grid">
+          {/* Product rows */}
+          <div className="product-rows">
             {deals.map((d, i) => {
               const wm = d.wm || {};
               const amz = d.amz || {};
-              const badge = (d.savings_pct ?? 0) >= 20 ? "20%+ cheaper" : null;
+
+              const wmPrice = Number(wm.price ?? 0);
+              const amzPrice = Number(amz.price ?? 0);
+
+              const roi =
+                wmPrice > 0 ? ((amzPrice - wmPrice) / wmPrice) * 100 : 0;
+
+              // keep behavior similar to old badge: only show when ROI is solid
+              const showBadge = roi >= 20;
+
+              const wmThumb = wm.thumbnail || FALLBACK_SVG;
+              const amzThumb = amz.thumbnail || FALLBACK_SVG;
+
               return (
-                <div className="deal-card" key={`${wm.product_id || amz.asin || wm.link || i}`}>
-                  <div className="thumb-wrap">
-                    <img
-                      src={wm.thumbnail || FALLBACK_SVG}
-                      alt={wm.title || "thumbnail"}
-                      loading="lazy"
-                      referrerPolicy="no-referrer"
-                      onError={(e) => {
-                        e.currentTarget.src = FALLBACK_SVG;
-                      }}
-                    />
-                    {badge && <div className="badge">{badge}</div>}
+                <div
+                  className="product-row"
+                  key={`${wm.product_id || amz.asin || wm.link || i}`}
+                >
+                  {/* Left: images + ROI badge */}
+                  <div className="product-media">
+                    <div className="thumb-pair">
+                      <div className="thumb-wrap small">
+                        <img
+                          src={wmThumb}
+                          alt={wm.title || "Walmart product"}
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            e.currentTarget.src = FALLBACK_SVG;
+                          }}
+                        />
+                        <span className="thumb-label">Walmart</span>
+                      </div>
+
+                      <div className="thumb-wrap small">
+                        <img
+                          src={amzThumb}
+                          alt={amz.title || "Amazon product"}
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            e.currentTarget.src = FALLBACK_SVG;
+                          }}
+                        />
+                        <span className="thumb-label">Amazon</span>
+                      </div>
+                    </div>
+
+                    {showBadge && (
+                      <div className="badge">
+                        {roi.toFixed(1)}% ROI
+                      </div>
+                    )}
                   </div>
-                  <div className="deal-meta">
-                    <a className="deal-title" href={wm.link || "#"} target="_blank" rel="noreferrer" title={wm.title}>
-                      {wm.title || "Untitled"}
-                    </a>
 
-                    <div className="row">
-                      <span className="label">Walmart</span>
-                      <span className="price">${Number(wm.price ?? 0).toFixed(2)}</span>
-                    </div>
-                    <div className="row">
-                      <span className="label">Amazon</span>
-                      <a className="price linky" href={amz.link || "#"} target="_blank" rel="noreferrer">
-                        ${Number(amz.price ?? 0).toFixed(2)}
+                  {/* Right: text + prices stacked Walmart then Amazon */}
+                  <div className="product-info">
+                    {/* Walmart block */}
+                    <div className="side-block">
+                      <div className="side-header">Walmart</div>
+                      <a
+                        className="deal-title"
+                        href={wm.link || "#"}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={wm.title}
+                      >
+                        {wm.title || "Untitled Walmart product"}
                       </a>
+                      <div className="row">
+                        <span className="label">Price</span>
+                        <span className="price">
+                          ${wmPrice.toFixed(2)}
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="savings">
-                      Save ${Number(d.savings_abs ?? 0).toFixed(2)} ({Number(d.savings_pct ?? 0).toFixed(1)}%)
+                    {/* Amazon block */}
+                    <div className="side-block">
+                      <div className="side-header">Amazon</div>
+                      <a
+                        className="deal-title"
+                        href={amz.link || "#"}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={amz.title}
+                      >
+                        {amz.title || "Untitled Amazon product"}
+                      </a>
+                      <div className="row">
+                        <span className="label">Price</span>
+                        <span className="price">
+                          ${amzPrice.toFixed(2)}
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="row tiny">
-                      <span>ASIN: {amz.asin || "—"}</span>
-                      <span>Category: {wm.category || selectedCategory || "—"}</span>
-                    </div>
-                    <div className="row tiny">
-                      <span>Match: {amz.match_score != null ? Number(amz.match_score).toFixed(2) : "—"}</span>
-                      <span>Checked: {amz.checked_at ? new Date(amz.checked_at).toLocaleString() : "—"}</span>
+                    {/* Summary row */}
+                    <div className="summary-row">
+                      <span>
+                        Difference:{" "}
+                        <strong>
+                          ${(amzPrice - wmPrice).toFixed(2)}
+                        </strong>
+                      </span>
+                      <span>
+                        ROI:{" "}
+                        <strong>
+                          {roi.toFixed(1)}%
+                        </strong>
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -259,7 +282,9 @@ export default function Dashboard() {
             })}
           </div>
 
-          {deals.length === 0 && !dealsLoading && <p className="subtitle">Nothing to show yet.</p>}
+          {deals.length === 0 && !dealsLoading && (
+            <p className="subtitle">Nothing to show yet.</p>
+          )}
         </div>
       </main>
 
@@ -288,11 +313,8 @@ export default function Dashboard() {
           position: relative;
           z-index: 1;
           width: min(1120px, 100%);
-          display: grid;
-          gap: 1.25rem;
         }
-        .card,
-        .products-card {
+        .card {
           background: var(--card-bg);
           backdrop-filter: blur(8px);
           border: 1px solid var(--panel-border);
@@ -301,6 +323,32 @@ export default function Dashboard() {
           color: #fff;
           padding: 24px;
         }
+
+        .tab-bar {
+          display: flex;
+          gap: 0.5rem;
+          margin-bottom: 1rem;
+        }
+        .tab {
+          padding: 8px 14px;
+          border-radius: 999px;
+          font-size: 0.9rem;
+          text-decoration: none;
+          color: rgba(255, 255, 255, 0.8);
+          background: rgba(255, 255, 255, 0.06);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          transition: background 0.2s, color 0.2s, transform 0.15s, box-shadow 0.15s;
+        }
+        .tab:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 6px 15px rgba(0, 0, 0, 0.25);
+        }
+        .tab.active {
+          background: linear-gradient(90deg, #8a2be2, #5b21b6);
+          color: #fff;
+          border-color: transparent;
+        }
+
         .title {
           font-weight: 700;
           font-size: clamp(2rem, 4vw, 3rem);
@@ -317,118 +365,102 @@ export default function Dashboard() {
           gap: 0.75rem;
           margin: 1rem 0;
         }
-        .primary,
-        .secondary {
-          border: none;
-          border-radius: 12px;
-          padding: 12px 16px;
-          font-weight: 700;
-          cursor: pointer;
-          transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
-        }
-        .primary {
-          background: linear-gradient(90deg, #8a2be2, #5b21b6);
-          color: #fff;
-        }
-        .secondary {
-          background: rgba(255, 255, 255, 0.12);
-          color: #fff;
-        }
-        .primary:hover,
-        .secondary:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 5px 15px rgba(0, 0, 0, 0.35);
-        }
-        .secondary:disabled,
-        .primary:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-          transform: none;
-          box-shadow: none;
-        }
         .status {
           margin-top: 0.5rem;
         }
-        .error {
-          color: #ffb4b4;
-          white-space: pre-wrap;
-          margin-top: 0.5rem;
-        }
-        .details {
-          margin-top: 1rem;
-        }
-        .details pre {
-          white-space: pre-wrap;
-        }
-        .products-title {
-          font-weight: 700;
-          margin: 0 0 0.5rem;
-        }
 
-        /* Responsive dropdown on small screens */
-        @media (max-width: 860px) {
-          .actions label {
-            flex-direction: column;
-            align-items: flex-start !important;
-          }
-          .actions select {
-            width: 220px !important;
-          }
-        }
-
-        /* Deals grid */
-        .deals-grid {
+        /* Product rows */
+        .product-rows {
           margin-top: 1rem;
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+        }
+        .product-row {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+          grid-template-columns: minmax(0, 260px) minmax(0, 1fr);
           gap: 16px;
-        }
-        .deal-card {
-          display: grid;
-          grid-template-rows: 180px auto;
-          background: rgba(255, 255, 255, 0.04);
+          padding: 14px 16px;
           border-radius: 14px;
-          overflow: hidden;
+          background: rgba(255, 255, 255, 0.04);
           border: 1px solid var(--panel-border);
         }
-        .deal-card .thumb-wrap {
+
+        .product-media {
+          position: relative;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .thumb-pair {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .thumb-wrap.small {
           position: relative;
           background: #fff;
+          border-radius: 10px;
+          padding: 6px;
           display: grid;
           place-items: center;
-          padding: 12px;
+          overflow: hidden;
         }
-        .deal-card .thumb-wrap img {
+        .thumb-wrap.small img {
           max-width: 100%;
-          max-height: 160px;
+          max-height: 120px;
           object-fit: contain;
           display: block;
         }
-        .badge {
+        .thumb-label {
           position: absolute;
-          top: 10px;
-          left: 10px;
+          bottom: 4px;
+          left: 6px;
+          font-size: 0.7rem;
+          font-weight: 700;
+          background: rgba(0, 0, 0, 0.6);
+          padding: 2px 6px;
+          border-radius: 999px;
+        }
+
+        .badge {
+          align-self: flex-start;
           background: #22c55e;
           color: #06260d;
           font-weight: 800;
           padding: 6px 10px;
           border-radius: 999px;
-          font-size: 0.75rem;
+          font-size: 0.8rem;
           border: 1px solid rgba(0, 0, 0, 0.15);
         }
-        .deal-meta {
-          padding: 12px 12px 14px;
-          display: grid;
-          gap: 8px;
-          background: var(--panel-bg);
-          border-top: 1px solid var(--panel-border);
-          min-height: 175px;
+
+        .product-info {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
         }
+
+        .side-block {
+          background: var(--panel-bg);
+          border-radius: 10px;
+          border: 1px solid var(--panel-border);
+          padding: 8px 10px;
+        }
+        .side-header {
+          font-size: 0.8rem;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          opacity: 0.75;
+          margin-bottom: 4px;
+        }
+
         .deal-title {
           color: #fff;
           text-decoration: none;
           font-weight: 800;
-          font-size: 1rem;
+          font-size: 0.95rem;
           line-height: 1.28;
           display: -webkit-box;
           -webkit-line-clamp: 2;
@@ -438,18 +470,14 @@ export default function Dashboard() {
         .deal-title:hover {
           text-decoration: underline;
         }
+
         .row {
           display: flex;
           align-items: baseline;
           justify-content: space-between;
           gap: 12px;
-          font-size: 0.96rem;
-        }
-        .row.tiny {
-          font-size: 0.8rem;
-          opacity: 0.8;
-          display: flex;
-          justify-content: space-between;
+          font-size: 0.9rem;
+          margin-top: 4px;
         }
         .label {
           opacity: 0.82;
@@ -458,22 +486,39 @@ export default function Dashboard() {
         .price {
           font-weight: 900;
         }
-        .linky {
-          color: var(--accent);
-          text-decoration: underline;
-          text-underline-offset: 2px;
-        }
-        .linky:hover {
+
+        .summary-row {
+          display: flex;
+          justify-content: space-between;
+          font-size: 0.86rem;
+          margin-top: 4px;
           opacity: 0.9;
         }
-        .savings {
-          font-weight: 900;
-          color: #8fffbc;
-          background: var(--save-bg);
-          border: 1px solid var(--save-brd);
-          padding: 6px 8px;
-          border-radius: 8px;
-          font-size: 0.95rem;
+
+        @media (max-width: 860px) {
+          .product-row {
+            grid-template-columns: 1fr;
+          }
+          .product-media {
+            flex-direction: row;
+            justify-content: space-between;
+          }
+          .thumb-pair {
+            flex-direction: row;
+          }
+        }
+
+        @media (max-width: 600px) {
+          .product-media {
+            flex-direction: column;
+          }
+          .thumb-pair {
+            flex-direction: column;
+          }
+          .summary-row {
+            flex-direction: column;
+            gap: 2px;
+          }
         }
       `}</style>
 

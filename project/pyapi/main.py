@@ -370,6 +370,7 @@ def _pick_best_amz_by_title(
                 "price_num": price_num,
                 "raw_badge": it.get("badge"),
                 "sim": sim,
+                "thumbnail": it.get("thumbnail") or it.get("image"),
             }
 
     return best
@@ -593,6 +594,7 @@ async def index_amazon_by_title(
                     "asin": best.get("asin"),
                     "title": best.get("title"),
                     "link": best.get("link"),
+                    "thumbnail": best.get("thumbnail"),
                     "match_score_sim": best.get("sim"),  # 0..100 RapidFuzz token_set_ratio
                     "brand_required": bool(req.require_brand and wm_brand),
                 },
@@ -690,6 +692,7 @@ async def deals_by_title(
                         "title": amz_meta.get("title"),
                         "price": amz_price,
                         "link": amz_meta.get("link"),
+                        "thumbnail": amz_meta.get("thumbnail"),
                         "sim": sim_score,
                     },
                     "savings_abs": diff,
