@@ -66,6 +66,17 @@ class IndexAmazonByTitleReq(BaseModel):
     require_brand: bool = True          # if WM brand exists, require it in AMZ title
     per_call_delay_ms: int = 350        # delay between SerpAPI calls to avoid 429s
 
+class ExtensionAmazonProduct(BaseModel):
+    """
+    Payload sent from the Chrome extension for a single Amazon product.
+    We keep it simple and just send what we can scrape easily.
+    """
+    asin: Optional[str] = None
+    title: str
+    price: float
+    brand: Optional[str] = None
+    thumbnail: Optional[str] = None
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Regex helpers for prices, stopwords, pack/size parsing
 # ──────────────────────────────────────────────────────────────────────────────
@@ -291,6 +302,83 @@ async def walmart_search_page(query: str, page: int = 1):
         },
     )
 
+@app.post("/extension/find-walmart-deal")
+async def extension_find_walmart_deal(payload: ExtensionAmazonProduct):
+    """
+    Called by the Chrome extension when user is on an Amazon product page.
+
+    We receive basic Amazon product info (title, price, brand, thumbnail),
+    search Walmart via SerpAPI, pick the best matching Walmart item, and
+    return a simple deal comparison.
+    """
+    if not SERPAPI_KEY:
+        raise HTTPException(500, "SERPAPI_KEY not set")
+
+    amz_title = payload.title.strip()
+    if not amz_title:
+        raise HTTPException(400, "title is required")
+
+    amz_price = float(payload.price)
+    amz_brand = payload.brand
+
+    # Build Walmart search query (brand + title usually works well)
+    search_kw = amz_title if not amz_brand else f"{amz_brand} {amz_title}"
+
+    try:
+        data = await walmart_search_page(search_kw, page=1)
+    except HTTPException as e:
+        # Bubble up SerpAPI errors as-is
+        raise e
+
+    wm_candidates = data.get("organic_results") or []
+    best = _pick_best_wm_by_title(
+        amz_title,
+        wm_candidates,
+        amz_brand=amz_brand,
+        min_similarity=80,
+        require_brand=bool(amz_brand),
+    )
+
+    if not best:
+        # No good Walmart match found
+        return {
+            "match_found": False,
+            "amazon": {
+                "asin": payload.asin,
+                "title": payload.title,
+                "price": amz_price,
+                "brand": payload.brand,
+                "thumbnail": payload.thumbnail,
+            },
+            "walmart": None,
+        }
+
+    wm_price = best["price"]
+    diff = amz_price - wm_price
+    savings_pct = diff / amz_price * 100 if amz_price > 0 else 0.0
+
+    return {
+        "match_found": True,
+        "amazon": {
+            "asin": payload.asin,
+            "title": payload.title,
+            "price": amz_price,
+            "brand": payload.brand,
+            "thumbnail": payload.thumbnail,
+        },
+        "walmart": {
+            "product_id": best["product_id"],
+            "title": best["title"],
+            "price": wm_price,
+            "thumbnail": best["thumbnail"],
+            "link": best["link"],
+            "sim": best["sim"],
+        },
+        "savings_abs": round(diff, 2),
+        "savings_pct": round(savings_pct, 2),
+    }
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Brand / title matching helpers for Amazon
 # ──────────────────────────────────────────────────────────────────────────────
@@ -374,6 +462,74 @@ def _pick_best_amz_by_title(
             }
 
     return best
+
+def _pick_best_wm_by_title(
+    amz_title: str,
+    wm_candidates: List[Dict[str, Any]],
+    *,
+    amz_brand: Optional[str],
+    min_similarity: int = 80,
+    require_brand: bool = False,
+) -> Optional[Dict[str, Any]]:
+    """
+    From a list of SerpAPI Walmart results, pick the best candidate for a given
+    Amazon title using RapidFuzz token_set_ratio, with optional brand + size checks.
+    """
+    best: Optional[Dict[str, Any]] = None
+    best_score = -1
+
+    for it in wm_candidates or []:
+        title = it.get("title") or ""
+        price_num = parse_price(
+            (it.get("primary_offer") or {}).get("offer_price")
+            or (it.get("primary_offer") or {}).get("price")
+            or it.get("price")
+        )
+        if not title or price_num is None:
+            continue
+
+        # Title similarity
+        sim = fuzz.token_set_ratio(amz_title, title)
+        if sim < min_similarity:
+            continue
+
+        # Optional brand check: require the Amazon brand to appear in WM title
+        if require_brand and amz_brand:
+            if not _brand_in_title(amz_brand, title):
+                continue
+
+        # Optional: size compatibility check; don't kill match if it fails,
+        # but penalize it a bit.
+        size_ok = sizes_compatible(amz_title, title)
+        penalty = 0 if size_ok else 8
+
+        # Sponsored or weird badges get a small penalty
+        sponsored = str(it.get("badge") or "").lower().find("sponsor") >= 0
+        penalty += 3 if sponsored else 0
+
+        adj = sim - penalty
+
+        if adj > best_score:
+            best_score = adj
+
+            pid = it.get("product_id")
+            raw_link = it.get("link") or ""
+            if not raw_link and pid:
+                raw_link = f"https://www.walmart.com/ip/{pid}"
+            if not raw_link and title:
+                raw_link = f"https://www.walmart.com/search?q={quote_plus(title)}"
+
+            best = {
+                "product_id": str(pid) if pid else None,
+                "title": title,
+                "price": price_num,
+                "link": raw_link,
+                "thumbnail": it.get("thumbnail") or it.get("image"),
+                "sim": sim,
+            }
+
+    return best
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Walmart scraping endpoint

@@ -1,0 +1,36 @@
+{
+    "manifest_version": 3,
+    "name": "FBAlgo Shopper",
+    "version": "1.0",
+    "description": "Find cheaper alternatives while shopping on Amazon.",
+    "permissions": ["activeTab", "scripting", "storage"],
+    "host_permissions": [
+      "https://www.amazon.com/*",
+      "https://feisty-renewal-production.up.railway.app/*"
+    ],
+    "background": {
+      "service_worker": "background.js"
+    },
+    "content_scripts": [
+      {
+        "matches": ["https://www.amazon.com/*"],
+        "js": ["content.js"]
+      }
+    ],
+    "web_accessible_resources": [
+      {
+        "resources": [
+          "inject/sidebar-frame.js",
+          "inject/styles.css",
+          "panel.html",
+          "panel.js",
+          "stars.js",
+          "panel.bundle.js",
+          "panel-loader.js",
+          "panel.css"
+        ],
+        "matches": ["https://www.amazon.com/*"]
+      }
+    ]
+  }
+  
