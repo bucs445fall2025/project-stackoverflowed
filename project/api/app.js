@@ -24,8 +24,8 @@ app.use("/api", debugRoutes); // /api/db/debug, /api/users/debug, /api/users/exi
 const userRoutes = require("./routes/userRoutes");
 app.use("/api/users", userRoutes);
 
-const ExtensionPanel = require("./routes/extensionRoutes")
-app.use("/api/extension-panel", ExtensionPanel);
+// const ExtensionPanel = require("./routes/extensionRoutes")
+// app.use("/api/extension-panel", ExtensionPanel);
 
 // Health check
 app.get("/", (_req, res) => res.send("Backend running"));
