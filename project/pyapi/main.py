@@ -83,17 +83,6 @@ class IndexAmazonByTitleReq(BaseModel):
     require_brand: bool = True          # if WM brand exists, require it in AMZ title
     per_call_delay_ms: int = 350        # delay between SerpAPI calls to avoid 429s
 
-class ExtensionAmazonProduct(BaseModel):
-    """
-    Payload sent from the Chrome extension for a single Amazon product.
-    We keep it simple and just send what we can scrape easily.
-    """
-    asin: Optional[str] = None
-    title: str
-    price: float
-    brand: Optional[str] = None
-    thumbnail: Optional[str] = None
-
 
 
 class Offer(TypedDict, total=False):
@@ -106,11 +95,17 @@ class Offer(TypedDict, total=False):
     brand: Optional[str]
     sim: Optional[float]      # similarity to Amazon title
 
-class ImageSearchReq(BaseModel):
-    image_url: str
+class ExtensionFullProduct(BaseModel):
+    asin: Optional[str] = None
     title: Optional[str] = None
+    price: Optional[float] = None
     brand: Optional[str] = None
-    price: Optional[float] = None  # optional – lets you compute deals
+    thumbnail: Optional[str] = None
+
+    # image-based fields
+    image_url: Optional[str] = None
+
+
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -490,7 +485,7 @@ async def walmart_search_page(query: str, page: int = 1):
     )
 
 @app.post("/extension/find-walmart-deal")
-async def extension_find_walmart_deal(payload: ExtensionAmazonProduct):
+async def extension_find_walmart_deal(payload: ExtensionFullProduct):
     """
     Called by the Chrome extension when user is on an Amazon product page.
 
@@ -567,7 +562,7 @@ async def extension_find_walmart_deal(payload: ExtensionAmazonProduct):
 
 # finds by title
 @app.post("/extension/find-deals")
-async def find_deals(payload: ExtensionAmazonProduct):
+async def find_deals(payload: ExtensionFullProduct):
     if not SERPAPI_KEY:
         raise HTTPException(500, "SERPAPI_KEY not set")
 
@@ -588,11 +583,13 @@ async def find_deals(payload: ExtensionAmazonProduct):
 
 #finds by image
 @app.post("/extension/find-deals-by-image")
-async def find_deals_by_image(payload: ImageSearchReq):
+async def find_deals_by_image(payload: ExtensionFullProduct):
     if not SERPAPI_KEY:
         raise HTTPException(500, "SERPAPI_KEY not set")
 
     img_url = payload.image_url
+    if not img_url:
+        raise HTTPException(400, "image_url is required")
 
     # Run Google Image Shopping
     gimg = await provider_google_image(img_url)
@@ -767,7 +764,7 @@ def _pick_best_wm_by_title(
     return best
 
 
-async def _score_offers_for_extension(payload: ExtensionAmazonProduct, all_offers: list[Offer]):
+async def _score_offers_for_extension(payload: ExtensionFullProduct, all_offers: list[Offer]):
     best_deals = []
 
     amz_title_norm = norm(payload.title)

@@ -115,7 +115,7 @@ function initPanel() {
     results.textContent = "Searching Walmart & other stores for this product…";
 
     try {
-      const res = await fetch(`${API_BASE}/extension/find-deals`, {
+      const res = await fetch(`${API_BASE}/extension/find-deals-by-image`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
