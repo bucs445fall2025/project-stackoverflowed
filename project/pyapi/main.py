@@ -587,26 +587,35 @@ async def find_deals_by_image(payload: ExtensionFullProduct):
     if not SERPAPI_KEY:
         raise HTTPException(500, "SERPAPI_KEY not set")
 
-    img_url = payload.image_url
+    # Accept thumbnail as fallback if image_url is missing
+    img_url = payload.image_url or payload.thumbnail
     if not img_url:
-        raise HTTPException(400, "image_url is required")
+        # Final fallback: do ONLY the title search
+        if not payload.title:
+            raise HTTPException(400, "Need at least image_url, thumbnail, or title")
+        img_url = None
 
-    # Run Google Image Shopping
-    gimg = await provider_google_image(img_url)
+    gimg = []
+    if img_url:
+        try:
+            gimg = await provider_google_image(img_url)
+        except Exception:
+            gimg = []
 
-    # Optionally: also run Walmart title search if the extension sent a title
+    # Also do Walmart + Google Shopping queries if title is present
     wm_offers = []
+    gshop_offers = []
     if payload.title:
-        q = f"{payload.brand} {payload.title}" if payload.brand else payload.title
-        wm_offers = await provider_walmart(q, brand=payload.brand)
+        query = f"{payload.brand} {payload.title}" if payload.brand else payload.title
+        wm_offers = await provider_walmart(query, brand=payload.brand)
+        gshop_offers = await provider_google_shopping(query)
 
-    # Combine all offers
-    all_offers = wm_offers + gimg
+    # Combine all possible offers
+    all_offers = wm_offers + gshop_offers + gimg
 
-    # Now reuse the SAME scoring/savings logic used in /extension/find-deals
-    # We don’t rewrite anything — just call your existing scoring code.
-
+    # Score / normalize savings using shared logic
     return await _score_offers_for_extension(payload, all_offers)
+
 
 
 
