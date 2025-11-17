@@ -124,6 +124,7 @@ function initPanel() {
           price,
           brand: brand || null,
           thumbnail: thumb || null,
+          image_url: params.get("image_url") || null,
         }),
       });
 

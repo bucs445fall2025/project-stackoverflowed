@@ -1,6 +1,8 @@
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from pydantic import BaseModel
+from typing import Optional
 from motor.motor_asyncio import AsyncIOMotorClient
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone, timedelta
@@ -588,12 +590,8 @@ async def find_deals_by_image(payload: ExtensionFullProduct):
         raise HTTPException(500, "SERPAPI_KEY not set")
 
     # Accept thumbnail as fallback if image_url is missing
-    img_url = payload.image_url or payload.thumbnail
-    if not img_url:
-        # Final fallback: do ONLY the title search
-        if not payload.title:
-            raise HTTPException(400, "Need at least image_url, thumbnail, or title")
-        img_url = None
+    img_url = (payload.image_url or payload.thumbnail or "").strip() or None
+
 
     gimg = []
     if img_url:
