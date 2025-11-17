@@ -335,7 +335,6 @@ def sizes_compatible(wm_title: str, amz_title: str, threshold: float = 0.85) -> 
 # Provider helpers 
 # ---------------------------
 
-#Serp's walmart but wraps it as an Offer to normalize from different merchants
 async def provider_walmart(query: str, *, brand: Optional[str]) -> list[Offer]:
     data = await walmart_search_page(query, page=1)
     items = data.get("organic_results") or []
@@ -360,6 +359,10 @@ async def provider_walmart(query: str, *, brand: Optional[str]) -> list[Offer]:
         if not raw_link and title:
             raw_link = f"https://www.walmart.com/search?q={quote_plus(title)}"
 
+        # If we *still* don't have a link, skip this offer
+        if not raw_link:
+            continue
+
         offers.append(
             {
                 "merchant": "walmart",
@@ -375,8 +378,6 @@ async def provider_walmart(query: str, *, brand: Optional[str]) -> list[Offer]:
     return offers
 
 
-
-#for google shopping
 async def provider_google_shopping(query: str) -> list[Offer]:
     data = await serp_get(
         "https://serpapi.com/search.json",
@@ -396,22 +397,30 @@ async def provider_google_shopping(query: str) -> list[Offer]:
         if price is None:
             continue
 
-        # source can be a string store name or a dict; be defensive
+        # Prefer real store URL (product_link), fall back to Serp's link
+        link = r.get("product_link") or r.get("link")
+        if not link:
+            # No usable link → skip this one so frontend never sees empty url
+            continue
+
         src = r.get("source")
         if isinstance(src, dict):
+            # SerpAPI sometimes puts store info in a dict
             source_domain = src.get("link") or src.get("name")
         else:
             source_domain = src
 
-        offers.append({
-            "merchant": "google_shopping",
-            "source_domain": source_domain,
-            "title": r.get("title") or "",
-            "price": float(price),
-            "url": r.get("link") or "",
-            "thumbnail": r.get("thumbnail"),
-            "brand": r.get("brand"),
-        })
+        offers.append(
+            {
+                "merchant": "google_shopping",
+                "source_domain": extract_domain(link) or source_domain,
+                "title": r.get("title") or "",
+                "price": float(price),
+                "url": link,
+                "thumbnail": r.get("thumbnail"),
+                "brand": r.get("brand"),
+            }
+        )
 
     return offers
 
