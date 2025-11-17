@@ -95,7 +95,7 @@ function initPanel() {
         cursor: pointer;
         font-size: 13px;
       ">
-        Find Walmart Savings
+        Find Savings
       </button>
 
       <div id="fb-results" style="margin-top:12px;font-size:13px;"></div>
@@ -112,10 +112,10 @@ function initPanel() {
       return;
     }
 
-    results.textContent = "Searching Walmart for this product…";
+    results.textContent = "Searching all over the place for this product…";
 
     try {
-      const res = await fetch(`${API_BASE}/extension/find-walmart-deal`, {
+      const res = await fetch(`${API_BASE}/extension/find-deals`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
