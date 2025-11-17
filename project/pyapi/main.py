@@ -7,6 +7,7 @@ from datetime import datetime, timezone, timedelta
 import httpx, asyncio, os, re, random
 from rapidfuzz import fuzz
 from urllib.parse import quote_plus  # used for building Walmart links
+from typing import TypedDict, Optional # for Offer class
 
 # ──────────────────────────────────────────────────────────────────────────────
 # App setup & configuration
@@ -37,6 +38,21 @@ if not MONGO_URL:
 # Async MongoDB client
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[MONGO_DB]
+
+#Used to filter Google Shopping results
+NICHE_DOMAINS = [
+    "woot.com",
+    "microcenter.com",
+    "monoprice.com",
+    "harborfreight.com",
+    "vitacost.com",
+    "bhphotovideo.com",
+    "adorama.com",
+    "ollies.us",          # or whatever domain they use
+    "sierra.com",
+    "tjmaxx.tjx.com",     # example for TJX brands
+]
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Request models
@@ -76,6 +92,18 @@ class ExtensionAmazonProduct(BaseModel):
     price: float
     brand: Optional[str] = None
     thumbnail: Optional[str] = None
+
+
+
+class Offer(TypedDict, total=False):
+    merchant: str             # "walmart", "google_shopping", "woot", etc.
+    source_domain: Optional[str]  # e.g. "woot.com", "microcenter.com"
+    title: str
+    price: float
+    url: str
+    thumbnail: Optional[str]
+    brand: Optional[str]
+    sim: Optional[float]      # similarity to Amazon title
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Regex helpers for prices, stopwords, pack/size parsing
@@ -194,6 +222,19 @@ async def serp_get(url: str, q: dict):
             detail=str(last_err) if last_err else "Unknown SerpAPI error",
         )
 
+#Filter google shopping results
+def filter_offers_by_domains(
+    offers: list[Offer],
+    allowed_domains: list[str],
+) -> list[Offer]:
+    out: list[Offer] = []
+    for o in offers:
+        url = o.get("url") or ""
+        domain = (o.get("source_domain") or "").lower()
+        if any(d in url.lower() or d in domain for d in allowed_domains):
+            out.append(o)
+    return out
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Text / size helpers for matching titles
 # ──────────────────────────────────────────────────────────────────────────────
@@ -280,6 +321,73 @@ def sizes_compatible(wm_title: str, amz_title: str, threshold: float = 0.85) -> 
     ratio = min(wm_total, am_total) / max(wm_total, am_total)
 
     return ratio >= threshold
+# ---------------------------
+# Provider helpers 
+# ---------------------------
+
+#Serp's walmart but wraps it as an Offer to normalize from different merchants
+async def provider_walmart(query: str, *, brand: Optional[str]) -> list[Offer]:
+    data = await walmart_search_page(query, page=1)
+    items = data.get("organic_results") or []
+
+    offers: list[Offer] = []
+
+    for it in items:
+        po = it.get("primary_offer") or {}
+        price = parse_price(po.get("offer_price") or po.get("price") or it.get("price"))
+        if price is None:
+            continue
+
+        offers.append({
+            "merchant": "walmart",
+            "source_domain": "walmart.com",
+            "title": it.get("title") or "",
+            "price": float(price),
+            "url": it.get("link") or "",
+            "thumbnail": it.get("thumbnail"),
+            "brand": it.get("brand"),
+        })
+
+    return offers
+
+#for google shopping
+async def provider_google_shopping(query: str) -> list[Offer]:
+    data = await serp_get(
+        "https://serpapi.com/search.json",
+        {
+            "engine": "google_shopping",
+            "q": query,
+            "hl": "en",
+            "gl": "us",
+        },
+    )
+
+    results = data.get("shopping_results") or []
+    offers: list[Offer] = []
+
+    for r in results:
+        price = parse_price(r.get("extracted_price") or r.get("price"))
+        if price is None:
+            continue
+
+        # source can be a string store name or a dict; be defensive
+        src = r.get("source")
+        if isinstance(src, dict):
+            source_domain = src.get("link") or src.get("name")
+        else:
+            source_domain = src
+
+        offers.append({
+            "merchant": "google_shopping",
+            "source_domain": source_domain,
+            "title": r.get("title") or "",
+            "price": float(price),
+            "url": r.get("link") or "",
+            "thumbnail": r.get("thumbnail"),
+            "brand": r.get("brand"),
+        })
+
+    return offers
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Walmart ingest (via SerpAPI)
@@ -377,6 +485,83 @@ async def extension_find_walmart_deal(payload: ExtensionAmazonProduct):
         "savings_abs": round(diff, 2),
         "savings_pct": round(savings_pct, 2),
     }
+
+# Will be used instead of the walmart-find-deals, this is for everything
+@app.post("/extension/find-deals")
+async def find_deals(payload: ExtensionAmazonProduct):
+    if not SERPAPI_KEY:
+        raise HTTPException(500, "SERPAPI_KEY not set")
+
+    # 1) Build query
+    if payload.brand:
+        query = f"{payload.brand} {payload.title}"
+    else:
+        query = payload.title
+
+    # 2) Call providers in parallel
+    walmart_task = asyncio.create_task(provider_walmart(query, brand=payload.brand))
+    gshop_task = asyncio.create_task(provider_google_shopping(query))
+
+    walmart_offers, gshop_offers = await asyncio.gather(
+        walmart_task, gshop_task
+    )
+
+    # 3) Split Google Shopping into general + niche if you want
+    niche_offers = filter_offers_by_domains(gshop_offers, NICHE_DOMAINS)
+    all_offers = walmart_offers + gshop_offers  # or walmart + niche_only, up to you
+
+    # 4) Score + find best deals
+    best_deals: list[dict] = []
+    amz_title_norm = norm(payload.title)
+    amz_price = float(payload.price)
+
+    for o in all_offers:
+        sim = fuzz.token_set_ratio(amz_title_norm, norm(o["title"]))
+        o["sim"] = sim
+
+        # soft threshold for extension UX
+        if sim < 70:
+            continue
+
+        price = o["price"]
+        savings_abs = amz_price - price
+        if savings_abs <= 0:
+            continue
+
+        savings_pct = (savings_abs / amz_price) * 100 if amz_price > 0 else 0
+
+        # basic minimum savings filter
+        if savings_abs < 2.0 and savings_pct < 5.0:
+            continue
+
+        best_deals.append({
+            "merchant": o["merchant"],
+            "source_domain": o.get("source_domain"),
+            "title": o["title"],
+            "price": price,
+            "url": o["url"],
+            "thumbnail": o.get("thumbnail"),
+            "brand": o.get("brand"),
+            "sim": sim,
+            "savings_abs": savings_abs,
+            "savings_pct": savings_pct,
+        })
+
+    best_deals.sort(key=lambda d: d["savings_abs"], reverse=True)
+
+    return {
+        "match_found": len(best_deals) > 0,
+        "amazon": {
+            "asin": payload.asin,
+            "title": payload.title,
+            "price": amz_price,
+            "brand": payload.brand,
+            "thumbnail": payload.thumbnail,
+        },
+        "best_deals": best_deals[:5],  # top 5
+    }
+
+
 
 
 # ──────────────────────────────────────────────────────────────────────────────
