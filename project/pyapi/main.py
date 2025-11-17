@@ -8,6 +8,7 @@ import httpx, asyncio, os, re, random
 from rapidfuzz import fuzz
 from urllib.parse import quote_plus  # used for building Walmart links
 from typing import TypedDict, Optional # for Offer class
+from urllib.parse import quote_plus, urlparse #for url parsing
 
 # ──────────────────────────────────────────────────────────────────────────────
 # App setup & configuration
@@ -235,6 +236,15 @@ def filter_offers_by_domains(
             out.append(o)
     return out
 
+def extract_domain(url: str) -> Optional[str]:
+    """Return the hostname (domain) for a URL, or None."""
+    if not url:
+        return None
+    try:
+        return urlparse(url).netloc.lower() or None
+    except Exception:
+        return None
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Text / size helpers for matching titles
 # ──────────────────────────────────────────────────────────────────────────────
@@ -326,29 +336,52 @@ def sizes_compatible(wm_title: str, amz_title: str, threshold: float = 0.85) -> 
 # ---------------------------
 
 #Serp's walmart but wraps it as an Offer to normalize from different merchants
-async def provider_walmart(query: str, *, brand: Optional[str]) -> list[Offer]:
-    data = await walmart_search_page(query, page=1)
-    items = data.get("organic_results") or []
+async def provider_google_shopping(query: str) -> list[Offer]:
+    data = await serp_get(
+        "https://serpapi.com/search.json",
+        {
+            "engine": "google_shopping",
+            "q": query,
+            "hl": "en",
+            "gl": "us",
+        },
+    )
 
+    results = data.get("shopping_results") or []
     offers: list[Offer] = []
 
-    for it in items:
-        po = it.get("primary_offer") or {}
-        price = parse_price(po.get("offer_price") or po.get("price") or it.get("price"))
+    for r in results:
+        price = parse_price(r.get("extracted_price") or r.get("price"))
         if price is None:
             continue
 
-        offers.append({
-            "merchant": "walmart",
-            "source_domain": "walmart.com",
-            "title": it.get("title") or "",
-            "price": float(price),
-            "url": it.get("link") or "",
-            "thumbnail": it.get("thumbnail"),
-            "brand": it.get("brand"),
-        })
+        # Primary product URL
+        url = r.get("link") or r.get("product_link") or ""
+
+        # Source info can be string or dict; then fall back to domain from URL
+        src = r.get("source")
+        if isinstance(src, dict):
+            src_val = src.get("link") or src.get("name")
+        else:
+            src_val = src
+
+        source_domain = src_val or extract_domain(url)
+
+        offers.append(
+            {
+                "merchant": "google_shopping",
+                "source_domain": source_domain,
+                "title": r.get("title") or "",
+                "price": float(price),
+                "url": url,
+                "thumbnail": r.get("thumbnail"),
+                "brand": r.get("brand"),
+            }
+        )
 
     return offers
+
+
 
 #for google shopping
 async def provider_google_shopping(query: str) -> list[Offer]:

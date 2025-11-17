@@ -33,10 +33,10 @@ function initPanel() {
         letter-spacing: .03em;
         text-transform: uppercase;
       ">
-        FBAlgo Savings
+        FBALGO SAVINGS
       </h2>
       <p style="margin: 0 0 10px; opacity: 0.8; font-size: 12px;">
-        Live Walmart vs Amazon deal check.
+        Live deal check across Walmart & niche stores.
       </p>
 
       <div style="
@@ -112,7 +112,7 @@ function initPanel() {
       return;
     }
 
-    results.textContent = "Searching all over the place for this product…";
+    results.textContent = "Searching Walmart & other stores for this product…";
 
     try {
       const res = await fetch(`${API_BASE}/extension/find-deals`, {
@@ -127,56 +127,117 @@ function initPanel() {
         }),
       });
 
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`HTTP ${res.status}: ${text}`);
-      }
-
+      console.log("find-deals status", res.status);
       const data = await res.json();
+      console.log("find-deals data", data);
 
-      if (!data.match_found || !data.walmart) {
+      if (
+        !data.match_found ||
+        !data.best_deals ||
+        data.best_deals.length === 0
+      ) {
         results.innerHTML =
-          "<span>No cheaper Walmart match found yet for this item.</span>";
+          "<span>No cheaper offers found yet for this item.</span>";
         return;
       }
 
-      const amzPrice = data.amazon.price;
-      const wmPrice = data.walmart.price;
-      const savingsAbs = data.savings_abs;
-      const savingsPct = data.savings_pct;
-      const wmLink = data.walmart.link;
+      const amazonPrice = price;
+      // sort all deals by lowest price first
+      const sortedDeals = [...data.best_deals].sort(
+        (a, b) => a.price - b.price
+      );
+
+      const cardsHtml = sortedDeals
+        .map((deal) => {
+          const merchant = deal.merchant || "other store";
+          const rawDomain =
+            deal.source_domain ||
+            (merchant === "walmart" ? "walmart.com" : merchant);
+
+          // Clean label for display (strip scheme + www)
+          const storeLabel = (rawDomain || "").replace(
+            /^https?:\/\/(www\.)?/i,
+            ""
+          );
+
+          const dealPrice = deal.price;
+          const savingsAbs = deal.savings_abs;
+          const savingsPct = deal.savings_pct;
+          const link = deal.url;
+          const titleText = deal.title || storeLabel;
+          const thumbDeal = deal.thumbnail || thumb;
+
+          const titleHtml = link
+            ? `<a href="${link}" target="_blank" rel="noreferrer"
+                   style="color:#e5e7eb;font-weight:600;text-decoration:underline;">
+                 ${titleText}
+               </a>`
+            : `<span style="font-weight:600;">${titleText}</span>`;
+
+          return `
+            <div style="
+              margin-top:8px;
+              padding:9px 10px;
+              border-radius:12px;
+              background:rgba(15,23,42,0.6);
+              border:1px solid rgba(148,163,184,0.45);
+            ">
+              <div style="display:flex;gap:8px;align-items:flex-start;">
+                ${
+                  thumbDeal
+                    ? `<div style="flex:0 0 48px;">
+                         <div style="
+                           width:48px;
+                           height:48px;
+                           border-radius:10px;
+                           background:#020617;
+                           display:flex;
+                           align-items:center;
+                           justify-content:center;
+                           overflow:hidden;
+                         ">
+                           <img src="${thumbDeal}" style="max-width:100%;max-height:100%;object-fit:contain;" />
+                         </div>
+                       </div>`
+                    : ""
+                }
+                <div style="flex:1;">
+                  <div style="font-size:11px;opacity:.8;margin-bottom:2px;">
+                    ${storeLabel || merchant}
+                  </div>
+                  <div style="font-size:13px;margin-bottom:2px;">
+                    ${titleHtml}
+                  </div>
+                  <div style="font-size:12px;margin-top:2px;">
+                    <strong>$${dealPrice.toFixed(2)}</strong>
+                    <span style="opacity:.8;"> · Save $${savingsAbs.toFixed(
+                      2
+                    )} (${savingsPct.toFixed(1)}% vs Amazon)</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          `;
+        })
+        .join("");
 
       results.innerHTML = `
         <div style="
-          margin-top:6px;
-          padding:8px 9px;
-          border-radius:10px;
-          background:rgba(16,185,129,0.1);
-          border:1px solid rgba(16,185,129,0.35);
+          margin-bottom:6px;
+          padding:6px 8px;
+          border-radius:8px;
+          background:rgba(148,163,184,0.18);
+          border:1px dashed rgba(148,163,184,0.5);
+          font-size:12px;
         ">
-          <div style="font-weight:600;margin-bottom:4px;">
-            Walmart match found!
-          </div>
-          <div>Amazon: <strong>$${amzPrice.toFixed(2)}</strong></div>
-          <div>Walmart: <strong>$${wmPrice.toFixed(2)}</strong></div>
-          <div style="margin-top:4px;">
-            You save <strong>$${savingsAbs.toFixed(
-              2
-            )}</strong> (${savingsPct.toFixed(1)}%) by buying at Walmart.
-          </div>
-          ${
-            wmLink
-              ? `<div style="margin-top:6px;">
-                   <a href="${wmLink}" target="_blank" rel="noreferrer" style="color:#a78bfa;font-weight:600;">
-                     Open Walmart listing →
-                   </a>
-                 </div>`
-              : ""
-          }
+          Found <strong>${sortedDeals.length}</strong> cheaper offer${
+        sortedDeals.length > 1 ? "s" : ""
+      } vs Amazon ($${amazonPrice.toFixed(2)}).
         </div>
+        ${cardsHtml}
       `;
     } catch (err) {
-      console.error(err);
+      console.error("find-deals error", err);
       results.innerHTML =
         "<span style='color:#f97373;'>Error: " +
         (err.message || "Unknown error") +
@@ -185,5 +246,4 @@ function initPanel() {
   });
 }
 
-// run immediately when the module is loaded
 initPanel();
