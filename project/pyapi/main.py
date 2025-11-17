@@ -336,46 +336,39 @@ def sizes_compatible(wm_title: str, amz_title: str, threshold: float = 0.85) -> 
 # ---------------------------
 
 #Serp's walmart but wraps it as an Offer to normalize from different merchants
-async def provider_google_shopping(query: str) -> list[Offer]:
-    data = await serp_get(
-        "https://serpapi.com/search.json",
-        {
-            "engine": "google_shopping",
-            "q": query,
-            "hl": "en",
-            "gl": "us",
-        },
-    )
+async def provider_walmart(query: str, *, brand: Optional[str]) -> list[Offer]:
+    data = await walmart_search_page(query, page=1)
+    items = data.get("organic_results") or []
 
-    results = data.get("shopping_results") or []
     offers: list[Offer] = []
 
-    for r in results:
-        price = parse_price(r.get("extracted_price") or r.get("price"))
+    for it in items:
+        po = it.get("primary_offer") or {}
+        price = parse_price(
+            po.get("offer_price") or po.get("price") or it.get("price")
+        )
         if price is None:
             continue
 
-        # Primary product URL
-        url = r.get("link") or r.get("product_link") or ""
+        title = it.get("title") or ""
+        pid = it.get("product_id")
+        raw_link = it.get("link") or ""
 
-        # Source info can be string or dict; then fall back to domain from URL
-        src = r.get("source")
-        if isinstance(src, dict):
-            src_val = src.get("link") or src.get("name")
-        else:
-            src_val = src
-
-        source_domain = src_val or extract_domain(url)
+        # Fall back to a stable Walmart URL if needed
+        if not raw_link and pid:
+            raw_link = f"https://www.walmart.com/ip/{pid}"
+        if not raw_link and title:
+            raw_link = f"https://www.walmart.com/search?q={quote_plus(title)}"
 
         offers.append(
             {
-                "merchant": "google_shopping",
-                "source_domain": source_domain,
-                "title": r.get("title") or "",
+                "merchant": "walmart",
+                "source_domain": extract_domain(raw_link) or "walmart.com",
+                "title": title,
                 "price": float(price),
-                "url": url,
-                "thumbnail": r.get("thumbnail"),
-                "brand": r.get("brand"),
+                "url": raw_link,
+                "thumbnail": it.get("thumbnail"),
+                "brand": it.get("brand"),
             }
         )
 
