@@ -541,14 +541,30 @@ async def find_deals(payload: ExtensionAmazonProduct):
         walmart_task, gshop_task
     )
 
-    # 3) Split Google Shopping into general + niche if you want
-    niche_offers = filter_offers_by_domains(gshop_offers, NICHE_DOMAINS)
-    all_offers = walmart_offers + gshop_offers  # or walmart + niche_only, up to you
+    # 3) Combine all offers (you can change this to niche-only if you want)
+    all_offers = walmart_offers + gshop_offers
 
     # 4) Score + find best deals
     best_deals: list[dict] = []
     amz_title_norm = norm(payload.title)
     amz_price = float(payload.price)
+
+    # --- NEW: precompute Amazon size / total units ---
+    amz_size = extract_size_and_count(payload.title)
+    amz_grams = amz_size.get("grams")
+    amz_count = amz_size.get("count") or 1
+
+    amz_units: Optional[float] = None
+    amz_unit_mode: Optional[str] = None  # "weight" or "count"
+
+    if amz_grams:
+        # Use weight/volume if we have it
+        amz_units = amz_grams * max(1, amz_count)
+        amz_unit_mode = "weight"
+    elif amz_count:
+        # Fallback: treat as count-based
+        amz_units = max(1, amz_count)
+        amz_unit_mode = "count"
 
     for o in all_offers:
         sim = fuzz.token_set_ratio(amz_title_norm, norm(o["title"]))
@@ -559,11 +575,51 @@ async def find_deals(payload: ExtensionAmazonProduct):
             continue
 
         price = o["price"]
-        savings_abs = amz_price - price
-        if savings_abs <= 0:
-            continue
 
-        savings_pct = (savings_abs / amz_price) * 100 if amz_price > 0 else 0
+        # --- NEW: try to use price-per-unit normalization when sizes are comparable ---
+        savings_abs: float
+        savings_pct: float
+
+        use_unit_normalization = False
+        offer_units: Optional[float] = None
+
+        if amz_units and amz_unit_mode:
+            offer_size = extract_size_and_count(o["title"])
+            offer_grams = offer_size.get("grams")
+            offer_count = offer_size.get("count") or 1
+
+            if amz_unit_mode == "weight" and offer_grams:
+                offer_units = offer_grams * max(1, offer_count)
+            elif amz_unit_mode == "count" and not offer_grams:
+                # Only use count-based comparison if neither side has weight info
+                offer_units = max(1, offer_count)
+
+            if offer_units:
+                # Check that total quantity isn't wildly different
+                unit_ratio = min(amz_units, offer_units) / max(amz_units, offer_units)
+                # Require them to be at least ~60% similar in total quantity
+                if unit_ratio >= 0.6:
+                    use_unit_normalization = True
+
+        if use_unit_normalization and amz_units and offer_units:
+            # Normalize everything to "price per unit"
+            amz_unit_price = amz_price / amz_units
+            offer_unit_price = price / offer_units
+
+            unit_savings = amz_unit_price - offer_unit_price
+            if unit_savings <= 0:
+                # No savings on a per-unit basis
+                continue
+
+            # Express savings as if you bought the same total quantity as the Amazon listing
+            savings_abs = unit_savings * amz_units
+            savings_pct = (unit_savings / amz_unit_price) * 100 if amz_unit_price > 0 else 0.0
+        else:
+            # Fallback: original raw-price comparison
+            savings_abs = amz_price - price
+            if savings_abs <= 0:
+                continue
+            savings_pct = (savings_abs / amz_price) * 100 if amz_price > 0 else 0.0
 
         # basic minimum savings filter
         if savings_abs < 2.0 and savings_pct < 5.0:
@@ -582,6 +638,7 @@ async def find_deals(payload: ExtensionAmazonProduct):
             "savings_pct": savings_pct,
         })
 
+    # Sort by absolute normalized savings, best first
     best_deals.sort(key=lambda d: d["savings_abs"], reverse=True)
 
     return {
