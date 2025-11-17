@@ -1,4 +1,4 @@
-const API_BASE = "https://feisty-renewal-production.up.railway.app";
+const API_BASE = "https://diligent-spontaneity-production-d286.up.railway.app";
 
 function initPanel() {
   const params = new URLSearchParams(window.location.search);
