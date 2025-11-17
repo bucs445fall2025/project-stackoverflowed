@@ -106,6 +106,13 @@ class Offer(TypedDict, total=False):
     brand: Optional[str]
     sim: Optional[float]      # similarity to Amazon title
 
+class ImageSearchReq(BaseModel):
+    image_url: str
+    title: Optional[str] = None
+    brand: Optional[str] = None
+    price: Optional[float] = None  # optional – lets you compute deals
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Regex helpers for prices, stopwords, pack/size parsing
 # ──────────────────────────────────────────────────────────────────────────────
@@ -424,6 +431,43 @@ async def provider_google_shopping(query: str) -> list[Offer]:
 
     return offers
 
+async def provider_google_image(image_url: str) -> list[Offer]:
+    data = await serp_get(
+        "https://serpapi.com/search.json",
+        {
+            "engine": "google_lens",
+            "url": image_url,
+            "hl": "en",
+            "gl": "us",
+        },
+    )
+
+    results = data.get("visual_matches") or []
+    offers: list[Offer] = []
+
+    for r in results:
+        price = parse_price(r.get("price") or r.get("extracted_price"))
+        if price is None:
+            continue
+
+        link = r.get("product_link") or r.get("link")
+        if not link:
+            continue
+
+        offers.append(
+            {
+                "merchant": "google_image",
+                "source_domain": extract_domain(link),
+                "title": r.get("title") or "",
+                "price": float(price),
+                "url": link,
+                "thumbnail": r.get("thumbnail"),
+                "brand": r.get("source"),  # lens sometimes returns brand here
+            }
+        )
+    return offers
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Walmart ingest (via SerpAPI)
 # ──────────────────────────────────────────────────────────────────────────────
@@ -521,19 +565,15 @@ async def extension_find_walmart_deal(payload: ExtensionAmazonProduct):
         "savings_pct": round(savings_pct, 2),
     }
 
-# Will be used instead of the walmart-find-deals, this is for everything
+# finds by title
 @app.post("/extension/find-deals")
 async def find_deals(payload: ExtensionAmazonProduct):
     if not SERPAPI_KEY:
         raise HTTPException(500, "SERPAPI_KEY not set")
 
-    # 1) Build query
-    if payload.brand:
-        query = f"{payload.brand} {payload.title}"
-    else:
-        query = payload.title
+    # Build query
+    query = f"{payload.brand} {payload.title}" if payload.brand else payload.title
 
-    # 2) Call providers in parallel
     walmart_task = asyncio.create_task(provider_walmart(query, brand=payload.brand))
     gshop_task = asyncio.create_task(provider_google_shopping(query))
 
@@ -541,117 +581,36 @@ async def find_deals(payload: ExtensionAmazonProduct):
         walmart_task, gshop_task
     )
 
-    # 3) Combine all offers (you can change this to niche-only if you want)
     all_offers = walmart_offers + gshop_offers
 
-    # 4) Score + find best deals
-    best_deals: list[dict] = []
-    amz_title_norm = norm(payload.title)
-    amz_price = float(payload.price)
+    # Use shared scoring logic
+    return await _score_offers_for_extension(payload, all_offers)
 
-    # --- NEW: precompute Amazon size / total units ---
-    amz_size = extract_size_and_count(payload.title)
-    amz_grams = amz_size.get("grams")
-    amz_count = amz_size.get("count") or 1
+#finds by image
+@app.post("/extension/find-deals-by-image")
+async def find_deals_by_image(payload: ImageSearchReq):
+    if not SERPAPI_KEY:
+        raise HTTPException(500, "SERPAPI_KEY not set")
 
-    amz_units: Optional[float] = None
-    amz_unit_mode: Optional[str] = None  # "weight" or "count"
+    img_url = payload.image_url
 
-    if amz_grams:
-        # Use weight/volume if we have it
-        amz_units = amz_grams * max(1, amz_count)
-        amz_unit_mode = "weight"
-    elif amz_count:
-        # Fallback: treat as count-based
-        amz_units = max(1, amz_count)
-        amz_unit_mode = "count"
+    # Run Google Image Shopping
+    gimg = await provider_google_image(img_url)
 
-    for o in all_offers:
-        sim = fuzz.token_set_ratio(amz_title_norm, norm(o["title"]))
-        o["sim"] = sim
+    # Optionally: also run Walmart title search if the extension sent a title
+    wm_offers = []
+    if payload.title:
+        q = f"{payload.brand} {payload.title}" if payload.brand else payload.title
+        wm_offers = await provider_walmart(q, brand=payload.brand)
 
-        # soft threshold for extension UX
-        if sim < 70:
-            continue
+    # Combine all offers
+    all_offers = wm_offers + gimg
 
-        price = o["price"]
+    # Now reuse the SAME scoring/savings logic used in /extension/find-deals
+    # We don’t rewrite anything — just call your existing scoring code.
 
-        # --- NEW: try to use price-per-unit normalization when sizes are comparable ---
-        savings_abs: float
-        savings_pct: float
+    return await _score_offers_for_extension(payload, all_offers)
 
-        use_unit_normalization = False
-        offer_units: Optional[float] = None
-
-        if amz_units and amz_unit_mode:
-            offer_size = extract_size_and_count(o["title"])
-            offer_grams = offer_size.get("grams")
-            offer_count = offer_size.get("count") or 1
-
-            if amz_unit_mode == "weight" and offer_grams:
-                offer_units = offer_grams * max(1, offer_count)
-            elif amz_unit_mode == "count" and not offer_grams:
-                # Only use count-based comparison if neither side has weight info
-                offer_units = max(1, offer_count)
-
-            if offer_units:
-                # Check that total quantity isn't wildly different
-                unit_ratio = min(amz_units, offer_units) / max(amz_units, offer_units)
-                # Require them to be at least ~60% similar in total quantity
-                if unit_ratio >= 0.6:
-                    use_unit_normalization = True
-
-        if use_unit_normalization and amz_units and offer_units:
-            # Normalize everything to "price per unit"
-            amz_unit_price = amz_price / amz_units
-            offer_unit_price = price / offer_units
-
-            unit_savings = amz_unit_price - offer_unit_price
-            if unit_savings <= 0:
-                # No savings on a per-unit basis
-                continue
-
-            # Express savings as if you bought the same total quantity as the Amazon listing
-            savings_abs = unit_savings * amz_units
-            savings_pct = (unit_savings / amz_unit_price) * 100 if amz_unit_price > 0 else 0.0
-        else:
-            # Fallback: original raw-price comparison
-            savings_abs = amz_price - price
-            if savings_abs <= 0:
-                continue
-            savings_pct = (savings_abs / amz_price) * 100 if amz_price > 0 else 0.0
-
-        # basic minimum savings filter
-        if savings_abs < 2.0 and savings_pct < 5.0:
-            continue
-
-        best_deals.append({
-            "merchant": o["merchant"],
-            "source_domain": o.get("source_domain"),
-            "title": o["title"],
-            "price": price,
-            "url": o["url"],
-            "thumbnail": o.get("thumbnail"),
-            "brand": o.get("brand"),
-            "sim": sim,
-            "savings_abs": savings_abs,
-            "savings_pct": savings_pct,
-        })
-
-    # Sort by absolute normalized savings, best first
-    best_deals.sort(key=lambda d: d["savings_abs"], reverse=True)
-
-    return {
-        "match_found": len(best_deals) > 0,
-        "amazon": {
-            "asin": payload.asin,
-            "title": payload.title,
-            "price": amz_price,
-            "brand": payload.brand,
-            "thumbnail": payload.thumbnail,
-        },
-        "best_deals": best_deals[:5],  # top 5
-    }
 
 
 
@@ -806,6 +765,118 @@ def _pick_best_wm_by_title(
             }
 
     return best
+
+
+async def _score_offers_for_extension(payload: ExtensionAmazonProduct, all_offers: list[Offer]):
+    best_deals = []
+
+    amz_title_norm = norm(payload.title)
+    amz_price = float(payload.price)
+
+    # --- NEW: precompute Amazon size / total units ---
+    amz_size = extract_size_and_count(payload.title)
+    amz_grams = amz_size.get("grams")
+    amz_count = amz_size.get("count") or 1
+
+    amz_units: Optional[float] = None
+    amz_unit_mode: Optional[str] = None  # "weight" or "count"
+
+    if amz_grams:
+        # Use weight/volume if we have it
+        amz_units = amz_grams * max(1, amz_count)
+        amz_unit_mode = "weight"
+    elif amz_count:
+        # Fallback: treat as count-based
+        amz_units = max(1, amz_count)
+        amz_unit_mode = "count"
+
+    for o in all_offers:
+        sim = fuzz.token_set_ratio(amz_title_norm, norm(o["title"]))
+        o["sim"] = sim
+
+        # soft threshold for extension UX
+        if sim < 70:
+            continue
+
+        price = o["price"]
+
+        # --- NEW: try to use price-per-unit normalization when sizes are comparable ---
+        savings_abs: float
+        savings_pct: float
+
+        use_unit_normalization = False
+        offer_units: Optional[float] = None
+
+        if amz_units and amz_unit_mode:
+            offer_size = extract_size_and_count(o["title"])
+            offer_grams = offer_size.get("grams")
+            offer_count = offer_size.get("count") or 1
+
+            if amz_unit_mode == "weight" and offer_grams:
+                offer_units = offer_grams * max(1, offer_count)
+            elif amz_unit_mode == "count" and not offer_grams:
+                # Only use count-based comparison if neither side has weight info
+                offer_units = max(1, offer_count)
+
+            if offer_units:
+                # Check that total quantity isn't wildly different
+                unit_ratio = min(amz_units, offer_units) / max(amz_units, offer_units)
+                # Require them to be at least ~60% similar in total quantity
+                if unit_ratio >= 0.6:
+                    use_unit_normalization = True
+
+        if use_unit_normalization and amz_units and offer_units:
+            # Normalize everything to "price per unit"
+            amz_unit_price = amz_price / amz_units
+            offer_unit_price = price / offer_units
+
+            unit_savings = amz_unit_price - offer_unit_price
+            if unit_savings <= 0:
+                # No savings on a per-unit basis
+                continue
+
+            # Express savings as if you bought the same total quantity as the Amazon listing
+            savings_abs = unit_savings * amz_units
+            savings_pct = (unit_savings / amz_unit_price) * 100 if amz_unit_price > 0 else 0.0
+        else:
+            # Fallback: original raw-price comparison
+            savings_abs = amz_price - price
+            if savings_abs <= 0:
+                continue
+            savings_pct = (savings_abs / amz_price) * 100 if amz_price > 0 else 0.0
+
+        # basic minimum savings filter
+        if savings_abs < 2.0 and savings_pct < 5.0:
+            continue
+
+        best_deals.append({
+            "merchant": o["merchant"],
+            "source_domain": o.get("source_domain"),
+            "title": o["title"],
+            "price": price,
+            "url": o["url"],
+            "thumbnail": o.get("thumbnail"),
+            "brand": o.get("brand"),
+            "sim": sim,
+            "savings_abs": savings_abs,
+            "savings_pct": savings_pct,
+        })
+
+    # Sort by absolute normalized savings, best first
+    best_deals.sort(key=lambda d: d["savings_abs"], reverse=True)
+
+    return {
+        "match_found": len(best_deals) > 0,
+        "amazon": {
+            "asin": payload.asin,
+            "title": payload.title,
+            "price": amz_price,
+            "brand": payload.brand,
+            "thumbnail": payload.thumbnail,
+        },
+        "best_deals": best_deals[:5],  # top 5
+    }
+
 
 
 # ──────────────────────────────────────────────────────────────────────────────
