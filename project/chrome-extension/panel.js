@@ -255,13 +255,15 @@ function initPanel() {
       //---------------------------------------------------
       document.querySelectorAll(".save-btn").forEach(btn => {
         btn.addEventListener("click", async () => {
+      
           const { authToken } = await chrome.storage.sync.get("authToken");
-
+      
           if (!authToken) {
-            alert("Please log in first!");
+            // open login popup
+            chrome.runtime.sendMessage({ type: "OPEN_LOGIN" });
             return;
           }
-
+      
           const body = {
             asin: btn.dataset.asin,
             title: btn.dataset.title,
@@ -269,7 +271,7 @@ function initPanel() {
             thumbnail: btn.dataset.thumbnail,
             url: btn.dataset.url
           };
-
+      
           await fetch(`${API_BASE}/api/users/save-product`, {
             method: "POST",
             headers: {
@@ -278,10 +280,11 @@ function initPanel() {
             },
             body: JSON.stringify(body)
           });
-
+      
           alert("Saved!");
         });
       });
+      
       //---------------------------------------------------
 
     } catch (err) {
