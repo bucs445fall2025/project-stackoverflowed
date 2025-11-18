@@ -6,6 +6,75 @@
   <body>
     <div id="app"></div>
 
+    <div id="auth-bar" style="
+      position:absolute;
+      top:10px;
+      right:10px;
+      font-size:12px;
+      z-index:999999;
+    ">
+      <button id="btn-open-login"
+        style="padding:5px 10px; background:#8b5cf6; border-radius:6px; border:none; color:white; cursor:pointer;">
+        Sign In
+      </button>
+    </div>
+
+    <!-- LOGIN MODAL -->
+    <div id="login-modal" style="
+      display:none;
+      position:fixed;
+      top:0; left:0; width:100%; height:100%;
+      background:rgba(0,0,0,0.5);
+      backdrop-filter:blur(2px);
+      justify-content:center;
+      align-items:center;
+      z-index:200000;
+    ">
+      <div style="
+        width:300px;
+        background:#1e1e2f;
+        padding:20px;
+        border-radius:12px;
+        color:white;
+        font-family:sans-serif;
+        box-shadow:0 0 12px rgba(0,0,0,0.3);
+      ">
+        <h3 style="margin-top:0;">Sign In</h3>
+
+        <div style="margin-bottom:10px;">
+          <input id="login-username" placeholder="Username"
+            style="width:100%; padding:8px; border-radius:6px; border:1px solid #555;" />
+        </div>
+        <div style="margin-bottom:10px;">
+          <input id="login-password" placeholder="Password" type="password"
+            style="width:100%; padding:8px; border-radius:6px; border:1px solid #555;" />
+        </div>
+
+        <button id="btn-login" style="width:100%; padding:8px; background:#8b5cf6; border:none; border-radius:6px; cursor:pointer;">
+          Log In
+        </button>
+
+        <button id="btn-cancel-login" style="margin-top:10px; width:100%; padding:8px; background:#333; border:none; border-radius:6px; cursor:pointer;">
+          Cancel
+        </button>
+      </div>
+    </div>
+
+    <!-- SIGN OUT BUTTON -->
+    <div id="logout-bar" style="
+      position:absolute;
+      bottom:20px;
+      width:100%;
+      text-align:center;
+      display:none;
+    ">
+      <button id="btn-logout"
+        style="padding:6px 14px; background:#444; border:none; border-radius:8px; color:white; cursor:pointer;">
+        Sign Out
+      </button>
+    </div>
+
+
     <!-- Load our JS as a module -->
     <script type="module" src="panel.js"></script>
   </body>

@@ -1,5 +1,82 @@
 const PY_API_BASE = "https://diligent-spontaneity-production-d286.up.railway.app";
 const NODE_API_BASE = "https://feisty-renewal-production.up.railway.app"
+
+
+async function refreshAuthUI() {
+  const { authToken } = await chrome.storage.sync.get("authToken");
+
+  const signInBtn = document.getElementById("btn-open-login");
+  const logoutBar = document.getElementById("logout-bar");
+
+  if (authToken) {
+    signInBtn.style.display = "none";
+    logoutBar.style.display = "block";
+  } else {
+    signInBtn.style.display = "inline-block";
+    logoutBar.style.display = "none";
+  }
+}
+
+function initAuthListeners() {
+  const loginModal = document.getElementById("login-modal");
+  const btnOpen = document.getElementById("btn-open-login");
+  const btnCancel = document.getElementById("btn-cancel-login");
+  const btnLogin = document.getElementById("btn-login");
+  const btnLogout = document.getElementById("btn-logout");
+
+  // Open login modal
+  btnOpen.addEventListener("click", () => {
+    loginModal.style.display = "flex";
+  });
+
+  // Cancel login
+  btnCancel.addEventListener("click", () => {
+    loginModal.style.display = "none";
+  });
+
+  // Login request
+  btnLogin.addEventListener("click", async () => {
+    const username = document.getElementById("login-username").value.trim();
+    const password = document.getElementById("login-password").value.trim();
+
+    if (!username || !password) {
+      alert("Enter username and password");
+      return;
+    }
+
+    try {
+      const res = await fetch(`${PY_API_BASE}/api/users/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.message || "Login failed");
+        return;
+      }
+
+      await chrome.storage.sync.set({ authToken: data.token });
+      alert("Logged in!");
+      loginModal.style.display = "none";
+      refreshAuthUI();
+    } catch (err) {
+      alert("Network error");
+    }
+  });
+
+  // Logout
+  btnLogout.addEventListener("click", async () => {
+    await chrome.storage.sync.remove("authToken");
+    alert("Signed out");
+    refreshAuthUI();
+  });
+
+  refreshAuthUI();
+}
+
 function initPanel() {
   const params = new URLSearchParams(window.location.search);
 
@@ -298,3 +375,5 @@ function initPanel() {
 }
 
 initPanel();
+initAuthListeners();
+
