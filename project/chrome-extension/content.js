@@ -111,32 +111,110 @@
   // --------------------------
   function injectSidebar(asin, info) {
     if (!asin) return;
-
+  
     const src = buildPanelSrc(asin, info);
-
+  
+    // If exists, update and return
     const existing = document.getElementById("fbalgo-extension-sidebar");
     if (existing) {
-      existing.src = src; // update on SPA navigation
+      existing.src = src;
       return;
     }
-
+  
+    // === SIDEBAR CONTAINER ===
+    const container = document.createElement("div");
+    container.id = "fbalgo-sidebar-container";
+    container.style.position = "fixed";
+    container.style.top = "0";
+    container.style.right = "0";
+    container.style.height = "100vh";
+    container.style.width = "380px";
+    container.style.background = "transparent";
+    container.style.display = "flex";
+    container.style.zIndex = "999999999";
+    container.style.flexDirection = "row";
+    container.style.transition = "width 0.15s ease";
+  
+    // === COLLAPSE BUTTON ===
+    const toggleBtn = document.createElement("div");
+    toggleBtn.textContent = "‹";
+    toggleBtn.style.position = "absolute";
+    toggleBtn.style.left = "-20px";
+    toggleBtn.style.top = "10px";
+    toggleBtn.style.width = "18px";
+    toggleBtn.style.height = "28px";
+    toggleBtn.style.borderRadius = "4px 0 0 4px";
+    toggleBtn.style.background = "#4b1d7a";
+    toggleBtn.style.color = "white";
+    toggleBtn.style.fontSize = "14px";
+    toggleBtn.style.fontWeight = "bold";
+    toggleBtn.style.display = "flex";
+    toggleBtn.style.justifyContent = "center";
+    toggleBtn.style.alignItems = "center";
+    toggleBtn.style.cursor = "pointer";
+    toggleBtn.style.zIndex = "1000000000";
+  
+    let isCollapsed = false;
+  
+    toggleBtn.addEventListener("click", () => {
+      if (!isCollapsed) {
+        container.style.width = "0px";
+        toggleBtn.textContent = "›";
+        isCollapsed = true;
+      } else {
+        container.style.width = "380px";
+        toggleBtn.textContent = "‹";
+        isCollapsed = false;
+      }
+    });
+  
+    // === DRAG HANDLE ===
+    const dragger = document.createElement("div");
+    dragger.style.width = "6px";
+    dragger.style.cursor = "ew-resize";
+    dragger.style.background = "rgba(255, 255, 255, 0.15)";
+    dragger.style.height = "100%";
+    dragger.style.position = "absolute";
+    dragger.style.left = "0";
+    dragger.style.top = "0";
+  
+    let isResizing = false;
+  
+    dragger.addEventListener("mousedown", (e) => {
+      isResizing = true;
+      document.body.style.userSelect = "none";
+    });
+  
+    document.addEventListener("mousemove", (e) => {
+      if (!isResizing) return;
+  
+      const newWidth = window.innerWidth - e.clientX;
+      if (newWidth > 200 && newWidth < 700) {
+        container.style.width = `${newWidth}px`;
+      }
+    });
+  
+    document.addEventListener("mouseup", () => {
+      isResizing = false;
+      document.body.style.userSelect = "auto";
+    });
+  
+    // === IFRAME ===
     const iframe = document.createElement("iframe");
     iframe.id = "fbalgo-extension-sidebar";
     iframe.src = src;
-
-    iframe.style.position = "fixed";
-    iframe.style.top = "0";
-    iframe.style.right = "0";
-    iframe.style.width = "380px";
-    iframe.style.height = "100vh";
     iframe.style.border = "none";
-    iframe.style.background = "transparent";
-    iframe.style.zIndex = "999999999";
+    iframe.style.width = "100%";
+    iframe.style.height = "100%";
     iframe.style.boxShadow = "0 0 12px rgba(0,0,0,0.25)";
-
-    document.body.appendChild(iframe);
+  
+    // Append all
+    container.appendChild(dragger);
+    container.appendChild(iframe);
+    container.appendChild(toggleBtn);
+    document.body.appendChild(container);
   }
-
+  
   // --------------------------
   // Init
   // --------------------------
