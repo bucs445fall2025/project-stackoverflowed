@@ -6,12 +6,23 @@ const userSchema = new mongoose.Schema({
   email:    { type: String, required: true, unique: true },
   passwordHash: { type: String, required: true },
 
+  savedProducts: [
+    {
+      asin: String,
+      title: String,
+      price: Number,
+      thumbnail: String,
+      createdAt: { type: Date, default: Date.now }
+    }
+  ],
+
   amazon: {
     accessToken: String,
     refreshToken: String,
     tokenExpiry: Date,
   },
 }, { timestamps: true });
+
 
 // Create and export the User model to be used in app.js and userController.js
 module.exports = mongoose.model('User', userSchema);

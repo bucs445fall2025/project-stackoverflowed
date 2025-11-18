@@ -37,31 +37,96 @@ router.post('/register', async (req, res) => {
   POST /api/users/login
   Logs in an existing user
 */
+const jwt = require('jsonwebtoken');
+const JWT_SECRET = process.env.JWT_SECRET || "super-secret-key-change-this";
+
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
-
-    // Validate input
-    if (!username || !password) {
+    if (!username || !password)
       return res.status(400).json({ message: 'Missing credentials' });
-    }
 
-    // Find user
     const user = await User.findOne({ username });
-    if (!user) {
+    if (!user)
       return res.status(400).json({ message: 'Invalid username or password' });
-    }
 
-    // Compare password
     const isMatch = await bcrypt.compare(password, user.passwordHash);
-    if (!isMatch) {
+    if (!isMatch)
       return res.status(400).json({ message: 'Invalid username or password' });
-    }
 
-    return res.status(200).json({ message: 'Login successful', userId: user._id });
+    // Create token for extension and website
+    const token = jwt.sign(
+      { userId: user._id },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    return res.status(200).json({
+      message: 'Login successful',
+      userId: user._id,
+      token,
+    });
   } catch (err) {
-    return res.status(500).json({ message: 'Server error during login', error: err.message });
+    return res.status(500).json({
+      message: 'Server error during login',
+      error: err.message,
+    });
   }
 });
+
+router.get("/extension-session", async (req, res) => {
+  try {
+    // If using cookie-session:
+    if (!req.session || !req.session.userId) {
+      return res.status(401).json({ loggedIn: false });
+    }
+
+    const token = jwt.sign(
+      { userId: req.session.userId },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    res.json({ loggedIn: true, token });
+  } catch (err) {
+    res.status(500).json({ loggedIn: false });
+  }
+});
+
+function authMiddleware(req, res, next) {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) return res.status(401).json({ message: "Missing token" });
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.userId = decoded.userId;
+    next();
+  } catch (err) {
+    return res.status(401).json({ message: "Invalid token" });
+  }
+}
+
+router.post("/save-product", authMiddleware, async (req, res) => {
+  try {
+    const { asin, title, price, thumbnail, url } = req.body;
+    if (!asin) return res.status(400).json({ message: "ASIN required" });
+
+    const user = await User.findById(req.userId);
+
+    user.savedProducts.push({ asin, title, price, thumbnail, url });
+    await user.save();
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ message: "Error saving product" });
+  }
+});
+
+router.get("/saved-products", authMiddleware, async (req, res) => {
+  const user = await User.findById(req.userId);
+  res.json({ products: user.savedProducts });
+});
+
+
 
 module.exports = router;

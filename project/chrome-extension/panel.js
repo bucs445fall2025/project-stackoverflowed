@@ -143,7 +143,6 @@ function initPanel() {
       }
 
       const amazonPrice = price;
-      // sort all deals by lowest price first
       const sortedDeals = [...data.best_deals].sort(
         (a, b) => a.price - b.price
       );
@@ -155,7 +154,6 @@ function initPanel() {
             deal.source_domain ||
             (merchant === "walmart" ? "walmart.com" : merchant);
 
-          // Clean label for display (strip scheme + www)
           const storeLabel = (rawDomain || "").replace(
             /^https?:\/\/(www\.)?/i,
             ""
@@ -215,6 +213,20 @@ function initPanel() {
                       2
                     )} (${savingsPct.toFixed(1)}% vs Amazon)</span>
                   </div>
+
+                  <!-- SAVE BUTTON -->
+                  <button 
+                    class="save-btn"
+                    data-asin="${asin}"
+                    data-title="${titleText}"
+                    data-price="${dealPrice}"
+                    data-thumbnail="${thumbDeal}"
+                    data-url="${link}"
+                    style="margin-top: 6px; padding:5px 10px; border-radius:6px; background:#8b5cf6; color:white; border:none; cursor:pointer;"
+                  >
+                    ❤️ Save
+                  </button>
+
                 </div>
               </div>
             </div>
@@ -237,6 +249,41 @@ function initPanel() {
         </div>
         ${cardsHtml}
       `;
+
+      //---------------------------------------------------
+      // SAVE BUTTON HANDLER — ADDED SAFELY
+      //---------------------------------------------------
+      document.querySelectorAll(".save-btn").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const { authToken } = await chrome.storage.sync.get("authToken");
+
+          if (!authToken) {
+            alert("Please log in first!");
+            return;
+          }
+
+          const body = {
+            asin: btn.dataset.asin,
+            title: btn.dataset.title,
+            price: parseFloat(btn.dataset.price),
+            thumbnail: btn.dataset.thumbnail,
+            url: btn.dataset.url
+          };
+
+          await fetch(`${API_BASE}/api/users/save-product`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer " + authToken
+            },
+            body: JSON.stringify(body)
+          });
+
+          alert("Saved!");
+        });
+      });
+      //---------------------------------------------------
+
     } catch (err) {
       console.error("find-deals error", err);
       results.innerHTML =

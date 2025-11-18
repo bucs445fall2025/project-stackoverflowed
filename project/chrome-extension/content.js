@@ -13,21 +13,16 @@
   }
 
   // --------------------------
-  // NEW: Extract BEST possible Amazon image
+  // Extract BEST possible Amazon image
   // --------------------------
   function extractAmazonMainImage() {
-    // 1. Main product image
     const landing = document.querySelector("#landingImage");
     if (landing) {
-      // highest quality
       const hires = landing.getAttribute("data-old-hires");
       if (hires && hires.length > 5) return hires;
-
-      const src = landing.src;
-      if (src && src.length > 5) return src;
+      if (landing.src && landing.src.length > 5) return landing.src;
     }
 
-    // 2. Dynamic image object (Amazon uses this frequently)
     const dynImg = document.querySelector("img[data-a-dynamic-image]");
     if (dynImg) {
       try {
@@ -37,7 +32,6 @@
       } catch (e) {}
     }
 
-    // 3. Fallback (same as your old logic)
     const imgEl =
       document.getElementById("landingImage") ||
       document.querySelector("#imgTagWrapperId img") ||
@@ -48,46 +42,41 @@
   }
 
   // --------------------------
-  // Scrape title / brand / price / thumbnail
+  // Scrape info
   // --------------------------
   function scrapeProductInfo() {
-    // Title
     const titleEl = document.getElementById("productTitle");
     const title = titleEl ? titleEl.textContent.trim() : "";
 
-    // Price
     let priceText = "";
     const priceEl =
       document.querySelector("#corePrice_feature_div span.a-offscreen") ||
       document.querySelector("#corePrice_desktop span.a-offscreen") ||
       document.querySelector("span.a-offscreen");
-
     if (priceEl) priceText = priceEl.textContent.trim();
+
     const price = priceText
       ? parseFloat(priceText.replace(/[^0-9.]/g, ""))
       : null;
 
-    // Brand
     const brandEl =
       document.querySelector("#bylineInfo") ||
       document.querySelector("tr.po-brand td.a-span9 span");
     const brand = brandEl ? brandEl.textContent.trim() : "";
 
-    // OLD thumbnail
-    const imgEl =
+    const thumbEl =
       document.getElementById("landingImage") ||
       document.querySelector("#imgTagWrapperId img") ||
       document.querySelector("img[src*='images/I']");
-    const thumbnail = imgEl ? imgEl.src : "";
+    const thumbnail = thumbEl ? thumbEl.src : "";
 
-    // NEW best image
     const image_url = extractAmazonMainImage();
 
     return { title, price, brand, thumbnail, image_url };
   }
 
   // --------------------------
-  // Build panel URL with full product info
+  // Build iframe URL
   // --------------------------
   function buildPanelSrc(asin, info) {
     const url = new URL(chrome.runtime.getURL("panel.html"));
@@ -98,8 +87,6 @@
       if (info.price != null) url.searchParams.set("price", String(info.price));
       if (info.brand) url.searchParams.set("brand", info.brand);
       if (info.thumbnail) url.searchParams.set("thumb", info.thumbnail);
-
-      // NEW: send best full-size image to panel.js
       if (info.image_url) url.searchParams.set("image_url", info.image_url);
     }
 
@@ -107,21 +94,19 @@
   }
 
   // --------------------------
-  // Inject the panel iframe
+  // Inject sidebar iframe
   // --------------------------
   function injectSidebar(asin, info) {
     if (!asin) return;
-  
+
     const src = buildPanelSrc(asin, info);
-  
-    // If exists, update and return
+
     const existing = document.getElementById("fbalgo-extension-sidebar");
     if (existing) {
       existing.src = src;
       return;
     }
-  
-    // === SIDEBAR CONTAINER ===
+
     const container = document.createElement("div");
     container.id = "fbalgo-sidebar-container";
     container.style.position = "fixed";
@@ -134,8 +119,8 @@
     container.style.zIndex = "999999999";
     container.style.flexDirection = "row";
     container.style.transition = "width 0.15s ease";
-  
-    // === COLLAPSE BUTTON ===
+
+    // Toggle button
     const toggleBtn = document.createElement("div");
     toggleBtn.textContent = "‹";
     toggleBtn.style.position = "absolute";
@@ -153,9 +138,9 @@
     toggleBtn.style.alignItems = "center";
     toggleBtn.style.cursor = "pointer";
     toggleBtn.style.zIndex = "1000000000";
-  
+
     let isCollapsed = false;
-  
+
     toggleBtn.addEventListener("click", () => {
       if (!isCollapsed) {
         container.style.width = "0px";
@@ -167,8 +152,8 @@
         isCollapsed = false;
       }
     });
-  
-    // === DRAG HANDLE ===
+
+    // Resize dragger
     const dragger = document.createElement("div");
     dragger.style.width = "6px";
     dragger.style.cursor = "ew-resize";
@@ -177,29 +162,27 @@
     dragger.style.position = "absolute";
     dragger.style.left = "0";
     dragger.style.top = "0";
-  
+
     let isResizing = false;
-  
-    dragger.addEventListener("mousedown", (e) => {
+
+    dragger.addEventListener("mousedown", () => {
       isResizing = true;
       document.body.style.userSelect = "none";
     });
-  
+
     document.addEventListener("mousemove", (e) => {
       if (!isResizing) return;
-  
       const newWidth = window.innerWidth - e.clientX;
       if (newWidth > 200 && newWidth < 700) {
         container.style.width = `${newWidth}px`;
       }
     });
-  
+
     document.addEventListener("mouseup", () => {
       isResizing = false;
       document.body.style.userSelect = "auto";
     });
-  
-    // === IFRAME ===
+
     const iframe = document.createElement("iframe");
     iframe.id = "fbalgo-extension-sidebar";
     iframe.src = src;
@@ -207,29 +190,25 @@
     iframe.style.width = "100%";
     iframe.style.height = "100%";
     iframe.style.boxShadow = "0 0 12px rgba(0,0,0,0.25)";
-  
-    // Append all
+
     container.appendChild(dragger);
     container.appendChild(iframe);
     container.appendChild(toggleBtn);
     document.body.appendChild(container);
   }
-  
+
   // --------------------------
-  // Init
+  // Init on load + SPA changes
   // --------------------------
   function init() {
     const asin = getASIN();
     if (!asin) return;
-
     const info = scrapeProductInfo();
     injectSidebar(asin, info);
   }
 
-  // Initial load
   window.addEventListener("load", init);
 
-  // Detect Amazon's SPA changes
   let lastUrl = location.href;
   setInterval(() => {
     if (location.href !== lastUrl) {
@@ -237,5 +216,14 @@
       init();
     }
   }, 800);
+
+  // --------------------------
+  // NEW: extension token → website
+  // --------------------------
+  chrome.runtime.sendMessage({ type: "REQUEST_TOKEN" }, (token) => {
+    if (token) {
+      window.postMessage({ type: "EXTENSION_LOGIN", token }, "*");
+    }
+  });
 
 })();
