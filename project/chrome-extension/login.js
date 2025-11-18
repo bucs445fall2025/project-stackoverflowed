@@ -1,4 +1,4 @@
-const API_BASE = "https://diligent-spontaneity-production-d286.up.railway.app";
+const API_BASE = "https://feisty-renewal-production.up.railway.app";
 
 document.getElementById("login-btn").addEventListener("click", async () => {
   const username = document.getElementById("username").value.trim();
