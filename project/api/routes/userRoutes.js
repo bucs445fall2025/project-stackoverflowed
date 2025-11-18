@@ -128,5 +128,17 @@ router.get("/saved-products", authMiddleware, async (req, res) => {
 });
 
 
+router.post("/remove-saved-products", authMiddleware, async (req, res) => {
+  const { asins } = req.body;
+
+  await User.updateOne(
+    { _id: req.user.id },
+    { $pull: { savedProducts: { asin: { $in: asins } } } }
+  );
+
+  res.json({ success: true });
+});
+
+
 
 module.exports = router;

@@ -99,6 +99,9 @@ export default function Dashboard() {
             <Link href="/chat-bot" className="tab-pill">
               <span className="tab-label">Chat Bot</span>
             </Link>
+            <Link href="/saved-products" className="tab-pill">
+              <span className="tab-label">Saved</span>
+           </Link>
           </nav>
 
           <h1 className={`${spaceGrotesk.className} title`}>Product Finder</h1>
