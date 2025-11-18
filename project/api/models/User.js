@@ -12,7 +12,7 @@ const userSchema = new mongoose.Schema({
       title: String,
       price: Number,
       thumbnail: String,
-      createdAt: { type: Date, default: Date.now }
+      url: String
     }
   ],
 

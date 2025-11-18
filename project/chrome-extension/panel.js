@@ -1,5 +1,5 @@
-const API_BASE = "https://diligent-spontaneity-production-d286.up.railway.app";
-
+const PY_API_BASE = "https://diligent-spontaneity-production-d286.up.railway.app";
+const NODE_API_BASE = "https://feisty-renewal-production.up.railway.app"
 function initPanel() {
   const params = new URLSearchParams(window.location.search);
 
@@ -115,7 +115,7 @@ function initPanel() {
     results.textContent = "Searching Walmart & other stores for this product…";
 
     try {
-      const res = await fetch(`${API_BASE}/extension/find-deals-by-image`, {
+      const res = await fetch(`${PY_API_BASE}/extension/find-deals-by-image`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -272,7 +272,7 @@ function initPanel() {
             url: btn.dataset.url
           };
       
-          await fetch(`${API_BASE}/api/users/save-product`, {
+          await fetch(`${NODE_API_BASE}/api/users/save-product`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
