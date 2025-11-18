@@ -25,9 +25,10 @@
           "panel.html",
           "panel.js",
           "stars.js",
-          "panel.bundle.js",
-          "panel-loader.js",
-          "panel.css"
+          "panel.css",
+          "login.html",
+          "login.js",
+          "login.css"
         ],
         "matches": ["https://www.amazon.com/*"]
       }
