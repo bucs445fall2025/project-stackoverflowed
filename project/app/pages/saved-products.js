@@ -121,7 +121,7 @@ export default function SavedProducts() {
                         rel="noreferrer"
                         className="view"
                       >
-                        Amazon Product →
+                        Amazon Product Link →
                       </a>
                     )}
 
@@ -132,7 +132,7 @@ export default function SavedProducts() {
                         rel="noreferrer"
                         className="view match"
                       >
-                        Match Deal →
+                        Match Deal Link →
                       </a>
                     )}
                   </div>

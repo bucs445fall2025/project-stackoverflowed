@@ -90,6 +90,8 @@
       if (info.image_url) url.searchParams.set("image_url", info.image_url);
     }
 
+    url.searchParams.set("amazonURL", window.location.href);
+    
     return url.toString();
   }
 

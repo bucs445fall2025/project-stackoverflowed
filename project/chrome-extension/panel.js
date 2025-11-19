@@ -87,8 +87,8 @@ function initPanel() {
   const priceStr = params.get("price");
   const price = priceStr ? parseFloat(priceStr) : NaN;
 
-  const amazonURL = window.location.href;
-
+  const amazonURL = params.get("amazonURL") || null;
+  
   const app = document.getElementById("app");
 
   const safeTitle =
