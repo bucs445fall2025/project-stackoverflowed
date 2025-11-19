@@ -348,20 +348,21 @@ function initPanel() {
           }
       
           const body = {
-            asin: asin,
+            asin: btn.dataset.asin,
 
             // AMAZON SIDE
-            amazonTitle: title,
-            amazonPrice: price,
-            amazonThumbnail: thumb,
-            amazonURL: amazonURL,
+            amazonTitle: btn.dataset.amazontitle,
+            amazonPrice: parseFloat(btn.dataset.amazonprice),
+            amazonThumbnail: btn.dataset.amazonthumbnail,
+            amazonURL: btn.dataset.amazonurl,
 
             // MATCH SIDE
-            matchTitle: btn.dataset.title,
-            matchPrice: parseFloat(btn.dataset.price),
-            matchThumbnail: btn.dataset.thumbnail,
+            matchTitle: btn.dataset.matchtitle,
+            matchPrice: parseFloat(btn.dataset.matchprice),
+            matchThumbnail: btn.dataset.matchthumbnail,
             matchURL: btn.dataset.matchurl
           };
+
       
           await fetch(`${NODE_API_BASE}/api/users/save-product`, {
             method: "POST",
