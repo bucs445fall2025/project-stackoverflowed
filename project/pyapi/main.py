@@ -394,6 +394,12 @@ async def provider_google_shopping(query: str) -> list[Offer]:
         },
     )
 
+    print("\n\n===== GOOGLE SHOPPING RAW RESPONSE =====")
+    print("\n\n===== GOOGLE SHOPPING RAW RESPONSE =====")
+    import json
+    print(json.dumps(data, indent=2))
+    print("========================================\n\n")
+
     results = data.get("shopping_results") or []
     offers: list[Offer] = []
 
@@ -410,7 +416,7 @@ async def provider_google_shopping(query: str) -> list[Offer]:
             continue  # don't include garbage Google redirect URLs
 
         link = raw_link
-        
+
         if not link:
             # No usable link → skip this one so frontend never sees empty url
             continue
@@ -569,27 +575,6 @@ async def extension_find_walmart_deal(payload: ExtensionFullProduct):
         "savings_abs": round(diff, 2),
         "savings_pct": round(savings_pct, 2),
     }
-
-# finds by title
-@app.post("/extension/find-deals")
-async def find_deals(payload: ExtensionFullProduct):
-    if not SERPAPI_KEY:
-        raise HTTPException(500, "SERPAPI_KEY not set")
-
-    # Build query
-    query = f"{payload.brand} {payload.title}" if payload.brand else payload.title
-
-    walmart_task = asyncio.create_task(provider_walmart(query, brand=payload.brand))
-    gshop_task = asyncio.create_task(provider_google_shopping(query))
-
-    walmart_offers, gshop_offers = await asyncio.gather(
-        walmart_task, gshop_task
-    )
-
-    all_offers = walmart_offers + gshop_offers
-
-    # Use shared scoring logic
-    return await _score_offers_for_extension(payload, all_offers)
 
 #finds by image
 @app.post("/extension/find-deals-by-image")
