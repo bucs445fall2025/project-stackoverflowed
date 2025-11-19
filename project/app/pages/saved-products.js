@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { Space_Grotesk } from "next/font/google";
+import React from "react";
 
 const StarsBackground = dynamic(() => import("../components/StarsBackground"), {
   ssr: false,
@@ -17,6 +18,9 @@ const spaceGrotesk = Space_Grotesk({
   weight: ["600", "700"],
 });
 
+// ⭐ Prevent Stars from remounting
+const MemoStars = React.memo(StarsBackground);
+
 export default function SavedProducts() {
   const [items, setItems] = useState([]);
   const [selected, setSelected] = useState(new Set());
@@ -30,10 +34,10 @@ export default function SavedProducts() {
               font-family='Inter, Arial, sans-serif' font-size='14' fill='#8b8fa3'>
           No image
         </text>
-      </svg>
+      </svg> 
     `);
 
-  // Load Saved Products
+  // Load saved products
   useEffect(() => {
     const token = localStorage.getItem("authToken");
     if (!token) return;
@@ -69,7 +73,7 @@ export default function SavedProducts() {
 
   return (
     <div className="dash-wrap">
-      <StarsBackground count={240} />
+      <MemoStars count={240} />
 
       <main className="content">
         <div className="card">
@@ -91,6 +95,7 @@ export default function SavedProducts() {
 
           <h1 className={`${spaceGrotesk.className} title`}>Saved Products</h1>
 
+          {/* ACTION BUTTONS */}
           <div className="actions">
             <button
               className={`action-btn remove ${selected.size ? "enabled" : ""}`}
@@ -99,9 +104,13 @@ export default function SavedProducts() {
             >
               Remove Selected
             </button>
+
+            <button className="action-btn export">
+              Export Selected (Soon)
+            </button>
           </div>
 
-          {/* PRODUCT ROWS */}
+          {/* PRODUCT CARDS */}
           <div className="product-rows">
             {items.map((p) => {
               const amzPrice = Number(p.amazonPrice ?? 0);
@@ -109,10 +118,9 @@ export default function SavedProducts() {
 
               const diff = amzPrice - matchPrice;
               const roi =
-                matchPrice > 0 ? ((amzPrice - matchPrice) / matchPrice) * 100 : 0;
-
-              const amzThumb = p.amazonThumbnail || FALLBACK_SVG;
-              const matchThumb = p.matchThumbnail || FALLBACK_SVG;
+                matchPrice > 0
+                  ? ((amzPrice - matchPrice) / matchPrice) * 100
+                  : 0;
 
               const roiClass =
                 roi > 0
@@ -123,71 +131,65 @@ export default function SavedProducts() {
 
               return (
                 <div className="product-row" key={p.asin}>
-                  <label className="checkbox-wrap">
+                  {/* Checkbox */}
+                  <div className="checkbox-container">
                     <input
                       type="checkbox"
                       checked={selected.has(p.asin)}
                       onChange={() => toggleSelect(p.asin)}
                     />
-                  </label>
+                  </div>
 
-                  {/* Header Row */}
+                  {/* Header */}
                   <div className="row-header">
                     <div className={roiClass}>{roi.toFixed(1)}% ROI</div>
                     <div className="row-header-meta">
-                      Difference: <span className="strong">${diff.toFixed(2)}</span>
+                      Difference:{" "}
+                      <span className="strong">${diff.toFixed(2)}</span>
                     </div>
                   </div>
 
-                  {/* BODY */}
+                  {/* Body */}
                   <div className="row-body">
-                    {/* LEFT: IMAGES */}
+                    {/* images */}
                     <div className="product-media">
                       <div className="thumb-pair">
                         <div className="thumb-wrap small">
-                          <img src={amzThumb} alt={p.amazonTitle} />
+                          <img
+                            src={p.amazonThumbnail || FALLBACK_SVG}
+                            alt={p.amazonTitle}
+                          />
                           <span className="thumb-label">Amazon</span>
                         </div>
 
                         <div className="thumb-wrap small">
-                          <img src={matchThumb} alt={p.matchTitle} />
+                          <img
+                            src={p.matchThumbnail || FALLBACK_SVG}
+                            alt={p.matchTitle}
+                          />
                           <span className="thumb-label">Match</span>
                         </div>
                       </div>
                     </div>
 
-                    {/* RIGHT: DETAILS */}
+                    {/* text */}
                     <div className="product-info">
-                      {/* AMAZON BOX */}
                       <div className="side-block">
                         <div className="side-header">AMAZON</div>
-                        <a
-                          className="deal-title"
-                          href={p.amazonURL}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
+                        <a className="deal-title" href={p.amazonURL} target="_blank">
                           {p.amazonTitle}
                         </a>
-
                         <div className="row price-row">
                           <span className="label">Price</span>
                           <span className="price">${amzPrice.toFixed(2)}</span>
                         </div>
                       </div>
 
-                      {/* MATCH BOX */}
                       <div className="side-block">
                         <div className="side-header">MATCH</div>
-                        <a
-                          className="deal-title"
-                          href={p.matchURL}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
+                        <a className="deal-title" href={p.matchURL} target="_blank">
                           {p.matchTitle}
                         </a>
-
                         <div className="row price-row">
                           <span className="label">Price</span>
                           <span className="price">${matchPrice.toFixed(2)}</span>
@@ -210,23 +212,20 @@ export default function SavedProducts() {
         </div>
       </main>
 
-      {/* ===== CSS — FULL COPY FROM DASHBOARD ===== */}
+      {/* FULL STYLING COPIED FROM PRODUCT FINDER */}
       <style jsx>{`
         :root {
           --card-bg: rgba(22, 16, 34, 0.78);
           --panel-bg: rgba(13, 15, 26, 0.95);
           --panel-border: rgba(255, 255, 255, 0.08);
-          --muted: rgba(255, 255, 255, 0.75);
-          --accent: #a78bfa;
-          --save-bg: rgba(34, 197, 94, 0.1);
-          --save-brd: rgba(34, 197, 94, 0.22);
         }
 
         .dash-wrap {
           position: relative;
           min-height: 100vh;
           background: radial-gradient(1200px 800px at 20% -10%, #4b1d7a 0%, transparent 60%),
-            radial-gradient(1200px 800px at 80% -10%, #2a0c52 0%, transparent 60%), #1c0333;
+            radial-gradient(1200px 800px at 80% -10%, #2a0c52 0%, transparent 60%),
+            #1c0333;
           display: grid;
           place-items: center;
           overflow: hidden;
@@ -242,82 +241,70 @@ export default function SavedProducts() {
         .card {
           background: var(--card-bg);
           backdrop-filter: blur(8px);
-          border: 1px solid var(--panel-border);
           border-radius: 16px;
-          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
-          color: #fff;
           padding: 24px;
+          color: white;
         }
 
         .tab-row {
           display: flex;
           gap: 0.5rem;
           margin-bottom: 1.2rem;
-          flex-wrap: wrap;
         }
 
         .tab-pill {
-          position: relative;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
           padding: 8px 18px;
           border-radius: 999px;
           background: rgba(15, 23, 42, 0.85);
           border: 1px solid rgba(148, 163, 184, 0.45);
-          cursor: pointer;
+          color: rgba(248, 250, 252, 0.85);
           text-decoration: none;
-          color: rgba(248, 250, 252, 0.8);
-          font-size: 0.85rem;
-          letter-spacing: 0.03em;
-          text-transform: uppercase;
-          overflow: hidden;
-          transition:
-            background 0.2s ease-out,
-            color 0.2s ease-out,
-            box-shadow 0.2s ease-out,
-            transform 0.15s ease-out;
         }
 
         .tab-pill.active {
           background: radial-gradient(circle at top left, #a855f7, #4c1d95);
-          color: #f9fafb;
           border-color: rgba(216, 180, 254, 0.8);
+          color: white;
         }
 
-        .tab-label {
-          position: relative;
-          z-index: 1;
+        .title {
+          font-size: clamp(2rem, 4vw, 3rem);
+          margin: 0 0 1.2rem;
+          font-weight: 700;
+        }
+
+        .actions {
+          margin-bottom: 1rem;
+          display: flex;
+          gap: 10px;
         }
 
         .action-btn {
           padding: 10px 16px;
-          border-radius: 10px;
-          font-weight: 700;
-          opacity: 0.5;
-          cursor: not-allowed;
-          border: none;
+          border-radius: 12px;
+          background: rgba(255, 255, 255, 0.1);
+          border: 1px solid rgba(255, 255, 255, 0.15);
+          color: white;
+          cursor: pointer;
+          opacity: 0.6;
         }
 
         .action-btn.enabled {
           opacity: 1;
-          cursor: pointer;
         }
 
-        .remove.enabled {
-          background: rgba(239, 68, 68, 0.25);
-          border: 1px solid rgba(239, 68, 68, 0.45);
+        .action-btn.remove.enabled {
+          background: rgba(239, 68, 68, 0.2);
+          border-color: rgba(239, 68, 68, 0.5);
         }
 
-        /* PRODUCT GRID */
         .product-rows {
-          margin-top: 1rem;
           display: flex;
           flex-direction: column;
           gap: 14px;
         }
 
-        .checkbox-wrap {
+        .checkbox-container {
           position: absolute;
           top: 10px;
           left: 10px;
@@ -332,168 +319,85 @@ export default function SavedProducts() {
             rgba(167, 139, 250, 0.09),
             rgba(15, 23, 42, 0.85)
           );
-          border: 1px solid rgba(255, 255, 255, 0.1);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          padding: 14px;
           box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
-          padding: 12px 14px 14px;
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-          transition:
-            border-color 0.18s ease-out,
-            box-shadow 0.18s ease-out,
-            transform 0.15s ease-out;
-          overflow: hidden;
         }
 
         .product-row:hover {
           border-color: rgba(255, 255, 255, 0.95);
-          transform: translateY(-3px);
-          box-shadow: 0 14px 35px rgba(0, 0, 0, 0.55);
         }
 
         .row-header {
           display: flex;
           justify-content: space-between;
-          align-items: center;
           padding-bottom: 4px;
           border-bottom: 1px solid rgba(255, 255, 255, 0.06);
         }
 
-        .row-header-meta {
-          font-size: 0.85rem;
-          opacity: 0.9;
+        .roi-pill {
+          padding: 4px 10px;
+          border-radius: 999px;
+          font-weight: bold;
+          font-size: 0.8rem;
         }
-
-        .strong {
-          font-weight: 700;
+        .roi-pill.positive {
+          background: rgba(34, 197, 94, 0.14);
+          border: 1px solid rgba(34, 197, 94, 0.5);
+          color: #bbf7d0;
+        }
+        .roi-pill.negative {
+          background: rgba(239, 68, 68, 0.14);
+          border: 1px solid rgba(248, 113, 113, 0.5);
+          color: #fecaca;
+        }
+        .roi-pill.neutral {
+          background: rgba(148, 163, 184, 0.14);
+          border: 1px solid rgba(148, 163, 184, 0.5);
+          color: white;
         }
 
         .row-body {
+          margin-top: 10px;
           display: grid;
           grid-template-columns: minmax(0, 260px) minmax(0, 1fr);
           gap: 16px;
-        }
-
-        .product-media {
-          display: flex;
-          align-items: center;
         }
 
         .thumb-pair {
           display: flex;
           flex-direction: column;
           gap: 10px;
-          width: 100%;
         }
 
-        .thumb-wrap.small {
-          background: radial-gradient(circle at top, #ffffff, #e5e7eb);
+        .thumb-wrap {
+          background: radial-gradient(circle at top, white, #e5e7eb);
           border-radius: 14px;
           padding: 8px;
-          display: grid;
-          place-items: center;
-        }
-
-        .thumb-wrap.small img {
-          max-width: 100%;
-          max-height: 120px;
-          object-fit: contain;
+          position: relative;
         }
 
         .thumb-label {
           position: absolute;
           bottom: 6px;
-          left: 8px;
-          font-size: 0.7rem;
-          font-weight: 700;
-          background: rgba(15, 23, 42, 0.8);
+          left: 6px;
           padding: 2px 6px;
           border-radius: 999px;
-        }
-
-        .product-info {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
+          font-size: 0.7rem;
+          background: rgba(15, 23, 42, 0.8);
         }
 
         .side-block {
           background: var(--panel-bg);
-          border-radius: 12px;
-          border: 1px solid var(--panel-border);
+          border: 1px solid rgba(255, 255, 255, 0.08);
           padding: 8px 10px;
-        }
-
-        .side-header {
-          font-size: 0.75rem;
-          text-transform: uppercase;
-          opacity: 0.7;
-          margin-bottom: 3px;
+          border-radius: 12px;
         }
 
         .deal-title {
-          color: #fff;
-          font-weight: 800;
-          font-size: 0.95rem;
+          color: white;
+          font-weight: bold;
           text-decoration: none;
-          line-height: 1.28;
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-          transition: color 0.15s ease-out, text-shadow 0.15s ease-out;
-        }
-
-        .deal-title:hover {
-          color: #e9d5ff;
-          text-shadow: 0 0 8px rgba(167, 139, 250, 0.45);
-        }
-
-        .row {
-          display: flex;
-          justify-content: space-between;
-          font-size: 0.9rem;
-          margin-top: 4px;
-        }
-
-        .price-row .price {
-          font-size: 1.02rem;
-          color: #c7d2fe;
-          font-weight: 900;
-        }
-
-        .meta-row {
-          margin-top: 4px;
-          font-size: 0.8rem;
-        }
-
-        .roi-pill {
-          padding: 4px 10px;
-          border-radius: 999px;
-          font-size: 0.8rem;
-          font-weight: 800;
-          border: 1px solid transparent;
-        }
-        .roi-pill.positive {
-          background: rgba(34, 197, 94, 0.14);
-          border-color: rgba(34, 197, 94, 0.5);
-          color: #bbf7d0;
-        }
-        .roi-pill.negative {
-          background: rgba(239, 68, 68, 0.14);
-          border-color: rgba(248, 113, 113, 0.5);
-          color: #fecaca;
-        }
-        .roi-pill.neutral {
-          background: rgba(148, 163, 184, 0.14);
-          border-color: rgba(148, 163, 184, 0.5);
-          color: #e5e7eb;
-        }
-
-        @media (max-width: 860px) {
-          .row-body {
-            grid-template-columns: 1fr;
-          }
         }
       `}</style>
     </div>
