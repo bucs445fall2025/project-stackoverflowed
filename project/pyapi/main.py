@@ -23,7 +23,7 @@ app = FastAPI(title="Walmart vs Amazon Deals (UPC-first)")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -436,7 +436,7 @@ async def provider_google_shopping(query: str) -> list[Offer]:
         offers.append(
             {
                 "merchant": "google_shopping",
-                "source_domain": extract_domain(link) or source_domain,
+                "source_domain": extract_domain(final_url) or source_domain,
                 "title": r.get("title") or "",
                 "price": float(price),
                 "url": final_url,
