@@ -390,6 +390,7 @@ async def provider_google_shopping(query: str) -> list[Offer]:
             "q": query,
             "hl": "en",
             "gl": "us",
+            "product_link": "true",
         },
     )
 
@@ -402,7 +403,14 @@ async def provider_google_shopping(query: str) -> list[Offer]:
             continue
 
         # Prefer real store URL (product_link), fall back to Serp's link
-        link = r.get("product_link") or r.get("link")
+        raw_link = r.get("product_link") or r.get("link")
+
+        # Skip Google redirect URLs
+        if raw_link and "google.com/shopping" in raw_link:
+            continue  # don't include garbage Google redirect URLs
+
+        link = raw_link
+        
         if not link:
             # No usable link → skip this one so frontend never sees empty url
             continue
