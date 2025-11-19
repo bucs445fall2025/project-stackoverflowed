@@ -113,9 +113,29 @@ export default function SavedProducts() {
                 <div className="info">
                   <div className="title">{p.title}</div>
                   <div className="price">${Number(p.price).toFixed(2)}</div>
-                  <a href={p.url} target="_blank" className="view">
-                    View Product →
-                  </a>
+                  <div className="links">
+                    {p.amazonURL && (
+                      <a
+                        href={p.amazonURL}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="view"
+                      >
+                        Amazon Product →
+                      </a>
+                    )}
+
+                    {p.matchURL && (
+                      <a
+                        href={p.matchURL}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="view match"
+                      >
+                        Match Deal →
+                      </a>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
@@ -240,6 +260,21 @@ export default function SavedProducts() {
           font-size: 0.8rem;
           text-decoration: none;
         }
+        .links {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .view {
+          color: #a78bfa;
+          font-size: 0.8rem;
+          text-decoration: none;
+        }
+
+        .view.match {
+          color: #34d399; /* green for the deal link */
+        }      
       `}</style>
     </div>
   );

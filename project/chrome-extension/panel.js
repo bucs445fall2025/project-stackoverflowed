@@ -87,6 +87,8 @@ function initPanel() {
   const priceStr = params.get("price");
   const price = priceStr ? parseFloat(priceStr) : NaN;
 
+  const amazonURL = window.location.href;
+
   const app = document.getElementById("app");
 
   const safeTitle =
@@ -298,7 +300,8 @@ function initPanel() {
                     data-title="${titleText}"
                     data-price="${dealPrice}"
                     data-thumbnail="${thumbDeal}"
-                    data-url="${link}"
+                    data-matchurl="${link}"
+                    data-amazonurl="${amazonURL}"
                     style="margin-top: 6px; padding:5px 10px; border-radius:6px; background:#8b5cf6; color:white; border:none; cursor:pointer;"
                   >
                     ❤️ Save
@@ -346,7 +349,8 @@ function initPanel() {
             title: btn.dataset.title,
             price: parseFloat(btn.dataset.price),
             thumbnail: btn.dataset.thumbnail,
-            url: btn.dataset.url
+            matchURL: btn.dataset.matchurl,
+            amazonURL: btn.dataset.amazonurl
           };
       
           await fetch(`${NODE_API_BASE}/api/users/save-product`, {

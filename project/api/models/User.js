@@ -12,7 +12,8 @@ const userSchema = new mongoose.Schema({
       title: String,
       price: Number,
       thumbnail: String,
-      url: String
+      matchURL: String,
+      amazonURL: String
     }
   ],
 
