@@ -26,7 +26,7 @@ export default function SavedProducts() {
     if (!t) return;
   
     fetch(`${API_BASE}/api/users/saved-products`, {
-      headers: { Authorization: "Bearer " + t },
+      headers: { Authorization: "Bearer " + localStorage.getItem("authToken")},
     })
       .then((r) => r.json())
       .then((d) => setItems(d.products || []));
