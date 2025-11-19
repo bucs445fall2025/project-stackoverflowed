@@ -339,6 +339,18 @@ def sizes_compatible(wm_title: str, amz_title: str, threshold: float = 0.85) -> 
 # Provider helpers 
 # ---------------------------
 
+async def resolve_google_redirect(url: str) -> str:
+    async with httpx.AsyncClient(
+        follow_redirects=True,
+        timeout=httpx.Timeout(10.0)
+    ) as c:
+        try:
+            r = await c.get(url)
+            return str(r.url)  # final merchant URL
+        except Exception:
+            return url
+
+
 async def provider_walmart(query: str, *, brand: Optional[str]) -> list[Offer]:
     data = await walmart_search_page(query, page=1)
     items = data.get("organic_results") or []
@@ -395,7 +407,6 @@ async def provider_google_shopping(query: str) -> list[Offer]:
     )
 
     print("\n\n===== GOOGLE SHOPPING RAW RESPONSE =====")
-    print("\n\n===== GOOGLE SHOPPING RAW RESPONSE =====")
     import json
     print(json.dumps(data, indent=2))
     print("========================================\n\n")
@@ -408,18 +419,12 @@ async def provider_google_shopping(query: str) -> list[Offer]:
         if price is None:
             continue
 
-        # Prefer real store URL (product_link), fall back to Serp's link
-        raw_link = r.get("product_link") or r.get("link")
-
-        # Skip Google redirect URLs
-        if raw_link and "google.com/shopping" in raw_link:
-            continue  # don't include garbage Google redirect URLs
-
-        link = raw_link
-
-        if not link:
-            # No usable link → skip this one so frontend never sees empty url
+        redirect = r.get("product_link") or r.get("link")
+        if not redirect:
             continue
+
+        # NEW: resolve redirect into real merchant URL
+        final_url = await resolve_google_redirect(redirect)
 
         src = r.get("source")
         if isinstance(src, dict):
@@ -434,7 +439,7 @@ async def provider_google_shopping(query: str) -> list[Offer]:
                 "source_domain": extract_domain(link) or source_domain,
                 "title": r.get("title") or "",
                 "price": float(price),
-                "url": link,
+                "url": final_url,
                 "thumbnail": r.get("thumbnail"),
                 "brand": r.get("brand"),
             }
