@@ -26,7 +26,7 @@ export default function SavedProducts() {
     if (!t) return;
   
     fetch(`${API_BASE}/api/users/saved-products`, {
-      headers: { Authorization: "Bearer " + t },
+      headers: { Authorization: "Bearer " + localStorage.getItem("authToken")},
     })
       .then((r) => r.json())
       .then((d) => setItems(d.products || []));
@@ -45,7 +45,7 @@ export default function SavedProducts() {
     await fetch(`${API_BASE}/api/users/remove-saved-products`, {
       method: "POST",
       headers: {
-        Authorization: "Bearer " + token,
+        Authorization: "Bearer " + localStorage.getItem("authToken"),
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ asins: Array.from(selected) }),

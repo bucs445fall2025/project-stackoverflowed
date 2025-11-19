@@ -60,17 +60,27 @@ export default function LoginPage() {
   const handleLogin = async (e) => {
     e.preventDefault();
     setError(false);
+  
     try {
-      const res = await fetch(
-        `${API_BASE}/api/users/login`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, password }),
-        }
-      );
-      if (res.ok) router.push("/dashboard");
-      else setError(true);
+      const res = await fetch(`${API_BASE}/api/users/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+  
+      const data = await res.json();
+  
+      if (!res.ok) {
+        setError(true);
+        return;
+      }
+  
+      // ⭐ STORE THE TOKEN FOR YOUR WEBSITE
+      localStorage.setItem("authToken", data.token);
+  
+      // Continue to dashboard
+      router.push("/dashboard");
+  
     } catch (err) {
       console.error(err);
       setError(true);
