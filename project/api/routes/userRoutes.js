@@ -108,12 +108,12 @@ function authMiddleware(req, res, next) {
 
 router.post("/save-product", authMiddleware, async (req, res) => {
   try {
-    const { asin, title, price, thumbnail, matchURL, amazonURL } = req.body;
+    const {asin, amazonTitle, amazonPrice, amazonThumbnail, amazonURL, matchTitle, matchPrice, matchThumbnail, matchURL} = req.body;
     if (!asin) return res.status(400).json({ message: "ASIN required" });
 
     const user = await User.findById(req.userId);
 
-    user.savedProducts.push({ asin, title, price, thumbnail, matchURL, amazonURL });
+    user.savedProducts.push({ asin, amazonTitle, amazonPrice, amazonThumbnail, amazonURL, matchTitle, matchPrice, matchThumbnail, matchURL });
     await user.save();
 
     res.json({ success: true });

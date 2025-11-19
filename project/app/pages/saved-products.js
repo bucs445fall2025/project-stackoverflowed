@@ -22,16 +22,15 @@ export default function SavedProducts() {
   const [selected, setSelected] = useState(new Set());
 
   useEffect(() => {
-    const t = localStorage.getItem("authToken");
-    if (!t) return;
-  
+    const token = localStorage.getItem("authToken");
+    if (!token) return;
+
     fetch(`${API_BASE}/api/users/saved-products`, {
-      headers: { Authorization: "Bearer " + localStorage.getItem("authToken")},
+      headers: { Authorization: "Bearer " + token },
     })
       .then((r) => r.json())
       .then((d) => setItems(d.products || []));
   }, []);
-  
 
   const toggleSelect = (asin) => {
     const s = new Set(selected);
@@ -51,7 +50,6 @@ export default function SavedProducts() {
       body: JSON.stringify({ asins: Array.from(selected) }),
     });
 
-    // Refresh UI
     setItems(items.filter((p) => !selected.has(p.asin)));
     setSelected(new Set());
   };
@@ -87,7 +85,7 @@ export default function SavedProducts() {
             >
               Remove Selected
             </button>
-
+            
             <button
               className={`action-btn export ${anySelected ? "enabled" : ""}`}
               disabled={!anySelected}
@@ -99,7 +97,8 @@ export default function SavedProducts() {
           {/* Product Grid */}
           <div className="grid">
             {items.map((p) => (
-              <div className="product-card" key={p.asin}>
+              <div className="product-row" key={p.asin}>
+                {/* Checkbox */}
                 <label className="checkbox-wrap">
                   <input
                     type="checkbox"
@@ -108,33 +107,67 @@ export default function SavedProducts() {
                   />
                 </label>
 
-                <img src={p.thumbnail} alt="" className="thumb" />
+                <div className="row-body">
+                  {/* AMAZON BLOCK */}
+                  <div className="side-block">
+                    <div className="side-header">AMAZON</div>
 
-                <div className="info">
-                  <div className="title">{p.title}</div>
-                  <div className="price">${Number(p.price).toFixed(2)}</div>
-                  <div className="links">
-                    {p.amazonURL && (
-                      <a
-                        href={p.amazonURL}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="view"
-                      >
-                        Amazon Product Link →
-                      </a>
-                    )}
+                    <div className="thumb-wrap small">
+                      <img
+                        src={p.amazonThumbnail}
+                        alt={p.amazonTitle}
+                        loading="lazy"
+                      />
+                      <span className="thumb-label">Amazon</span>
+                    </div>
 
-                    {p.matchURL && (
-                      <a
-                        href={p.matchURL}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="view match"
-                      >
-                        Match Deal Link →
-                      </a>
-                    )}
+                    <a
+                      className="deal-title"
+                      href={p.amazonURL}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={p.amazonTitle}
+                    >
+                      {p.amazonTitle}
+                    </a>
+
+                    <div className="row price-row">
+                      <span className="label">Price</span>
+                      <span className="price">
+                        ${Number(p.amazonPrice).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* MATCH BLOCK */}
+                  <div className="side-block">
+                    <div className="side-header">MATCH DEAL</div>
+
+                    <div className="thumb-wrap small">
+                      <img
+                        src={p.matchThumbnail}
+                        alt={p.matchTitle}
+                        loading="lazy"
+                      />
+                      <span className="thumb-label">Match</span>
+                    </div>
+
+                    <a
+                      className="deal-title"
+                      href={p.matchURL}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={p.matchTitle}
+                    >
+                      {p.matchTitle}
+                    </a>
+
+                    <div className="row price-row">
+                      <span className="label">Price</span>
+                      <span className="price">
+                        ${Number(p.matchPrice).toFixed(2)}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -147,7 +180,6 @@ export default function SavedProducts() {
         </div>
       </main>
 
-      {/* Styling */}
       <style jsx>{`
         .wrap {
           position: relative;
@@ -196,6 +228,7 @@ export default function SavedProducts() {
           gap: 10px;
           margin-bottom: 16px;
         }
+
         .action-btn {
           padding: 10px 16px;
           border-radius: 10px;
@@ -204,31 +237,40 @@ export default function SavedProducts() {
           cursor: not-allowed;
           border: none;
         }
+
         .action-btn.enabled {
           opacity: 1;
           cursor: pointer;
         }
-        .remove.enabled {
-          background: rgba(239, 68, 68, 0.25);
-          border: 1px solid rgba(239, 68, 68, 0.45);
-        }
-        .export.enabled {
-          background: rgba(167, 139, 250, 0.25);
-          border: 1px solid rgba(167, 139, 250, 0.45);
-        }
 
+        /* Saved row grid (like dashboard) */
         .grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+          display: flex;
+          flex-direction: column;
           gap: 16px;
         }
 
-        .product-card {
+        .product-row {
           position: relative;
-          border-radius: 16px;
+          border-radius: 18px;
+          background: linear-gradient(
+            135deg,
+            rgba(167, 139, 250, 0.09),
+            rgba(15, 23, 42, 0.85)
+          );
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
           padding: 14px;
-          background: rgba(15, 23, 42, 0.85);
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          display: flex;
+          gap: 12px;
+          transition: transform 0.15s ease-out, box-shadow 0.15s ease-out;
+          overflow: hidden;
+        }
+
+        .product-row:hover {
+          border-color: rgba(255, 255, 255, 0.95);
+          transform: translateY(-3px);
+          box-shadow: 0 14px 35px rgba(0, 0, 0, 0.55);
         }
 
         .checkbox-wrap {
@@ -237,44 +279,79 @@ export default function SavedProducts() {
           left: 10px;
         }
 
-        .thumb {
+        .row-body {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 16px;
           width: 100%;
-          height: 180px;
-          object-fit: contain;
-          background: white;
-          border-radius: 12px;
-          margin-bottom: 8px;
         }
 
-        .info .title {
-          font-weight: 700;
-          font-size: 0.9rem;
-          margin-bottom: 6px;
-        }
-        .info .price {
-          color: #c7d2fe;
-          margin-bottom: 8px;
-        }
-        .info .view {
-          color: #a78bfa;
-          font-size: 0.8rem;
-          text-decoration: none;
-        }
-        .links {
+        .side-block {
+          background: rgba(13, 15, 26, 0.95);
+          border-radius: 14px;
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          padding: 10px 12px;
           display: flex;
           flex-direction: column;
-          gap: 4px;
+          gap: 8px;
         }
 
-        .view {
-          color: #a78bfa;
-          font-size: 0.8rem;
+        .side-header {
+          font-size: 0.75rem;
+          text-transform: uppercase;
+          opacity: 0.7;
+          letter-spacing: 0.18em;
+        }
+
+        .thumb-wrap.small {
+          background: white;
+          padding: 8px;
+          border-radius: 12px;
+          display: grid;
+          place-items: center;
+          position: relative;
+          height: 150px;
+        }
+
+        .thumb-wrap.small img {
+          max-width: 100%;
+          max-height: 130px;
+          object-fit: contain;
+        }
+
+        .thumb-label {
+          position: absolute;
+          bottom: 6px;
+          left: 8px;
+          font-size: 0.7rem;
+          font-weight: 700;
+          background: rgba(15, 23, 42, 0.8);
+          padding: 2px 6px;
+          border-radius: 999px;
+        }
+
+        .deal-title {
+          color: #fff;
           text-decoration: none;
+          font-weight: 800;
+          font-size: 0.95rem;
+          line-height: 1.28;
+          overflow: hidden;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
         }
 
-        .view.match {
-          color: #34d399; /* green for the deal link */
-        }      
+        .row.price-row {
+          display: flex;
+          justify-content: space-between;
+          font-size: 0.9rem;
+        }
+
+        .price {
+          color: #c7d2fe;
+          font-weight: 900;
+        }
       `}</style>
     </div>
   );

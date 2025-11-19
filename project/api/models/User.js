@@ -9,13 +9,17 @@ const userSchema = new mongoose.Schema({
   savedProducts: [
     {
       asin: String,
-      title: String,
-      price: Number,
-      thumbnail: String,
-      matchURL: String,
-      amazonURL: String
+      amazonTitle: String,
+      amazonPrice: Number,
+      amazonThumbnail: String,
+      amazonURL: String,
+      matchTitle: String,
+      matchPrice: Number,
+      matchThumbnail: String,
+      matchURL: String
     }
   ],
+
 
   amazon: {
     accessToken: String,

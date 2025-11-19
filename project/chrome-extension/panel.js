@@ -297,11 +297,14 @@ function initPanel() {
                   <button 
                     class="save-btn"
                     data-asin="${asin}"
-                    data-title="${titleText}"
-                    data-price="${dealPrice}"
-                    data-thumbnail="${thumbDeal}"
-                    data-matchurl="${link}"
+                    data-amazonTitle="${safeTitle}"
+                    data-amazonPrice="${price}"
+                    data-amazonThumbnail="${thumb}"
                     data-amazonurl="${amazonURL}"
+                    data-matchTitle="${titleText}"
+                    data-matchPrice="${dealPrice}"
+                    data-matchThumbnail="${thumbDeal}"
+                    data-matchurl="${link}"
                     style="margin-top: 6px; padding:5px 10px; border-radius:6px; background:#8b5cf6; color:white; border:none; cursor:pointer;"
                   >
                     ❤️ Save
@@ -345,12 +348,19 @@ function initPanel() {
           }
       
           const body = {
-            asin: btn.dataset.asin,
-            title: btn.dataset.title,
-            price: parseFloat(btn.dataset.price),
-            thumbnail: btn.dataset.thumbnail,
-            matchURL: btn.dataset.matchurl,
-            amazonURL: btn.dataset.amazonurl
+            asin: asin,
+
+            // AMAZON SIDE
+            amazonTitle: title,
+            amazonPrice: price,
+            amazonThumbnail: thumb,
+            amazonURL: amazonURL,
+
+            // MATCH SIDE
+            matchTitle: btn.dataset.title,
+            matchPrice: parseFloat(btn.dataset.price),
+            matchThumbnail: btn.dataset.thumbnail,
+            matchURL: btn.dataset.matchurl
           };
       
           await fetch(`${NODE_API_BASE}/api/users/save-product`, {
