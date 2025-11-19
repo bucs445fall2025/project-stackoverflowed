@@ -23,7 +23,7 @@ app = FastAPI(title="Walmart vs Amazon Deals (UPC-first)")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -339,17 +339,6 @@ def sizes_compatible(wm_title: str, amz_title: str, threshold: float = 0.85) -> 
 # Provider helpers 
 # ---------------------------
 
-async def resolve_google_redirect(url: str) -> str:
-    async with httpx.AsyncClient(
-        follow_redirects=True,
-        timeout=httpx.Timeout(10.0)
-    ) as c:
-        try:
-            r = await c.get(url)
-            return str(r.url)  # final merchant URL
-        except Exception:
-            return url
-
 
 async def provider_walmart(query: str, *, brand: Optional[str]) -> list[Offer]:
     data = await walmart_search_page(query, page=1)
@@ -419,12 +408,18 @@ async def provider_google_shopping(query: str) -> list[Offer]:
         if price is None:
             continue
 
-        redirect = r.get("product_link") or r.get("link")
-        if not redirect:
-            continue
+        # Prefer real store URL (product_link), fall back to Serp's link
+        raw_link = r.get("product_link") or r.get("link")
 
-        # NEW: resolve redirect into real merchant URL
-        final_url = await resolve_google_redirect(redirect)
+        # Skip Google redirect URLs
+        if raw_link and "google.com/shopping" in raw_link:
+            continue  # don't include garbage Google redirect URLs
+
+        link = raw_link
+
+        if not link:
+            # No usable link → skip this one so frontend never sees empty url
+            continue
 
         src = r.get("source")
         if isinstance(src, dict):
@@ -436,10 +431,10 @@ async def provider_google_shopping(query: str) -> list[Offer]:
         offers.append(
             {
                 "merchant": "google_shopping",
-                "source_domain": extract_domain(final_url) or source_domain,
+                "source_domain": extract_domain(link) or source_domain,
                 "title": r.get("title") or "",
                 "price": float(price),
-                "url": final_url,
+                "url": link,
                 "thumbnail": r.get("thumbnail"),
                 "brand": r.get("brand"),
             }
