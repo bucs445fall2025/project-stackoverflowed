@@ -300,11 +300,11 @@ function initPanel() {
                     data-amazonTitle="${safeTitle}"
                     data-amazonPrice="${price}"
                     data-amazonThumbnail="${thumb}"
-                    data-amazonurl="${amazonURL}"
+                    data-amazonurl="${encodeURIComponent(amazonURL)}"
                     data-matchTitle="${titleText}"
                     data-matchPrice="${dealPrice}"
                     data-matchThumbnail="${thumbDeal}"
-                    data-matchurl="${link}"
+                    data-matchurl="${encodeURIComponent(link)}"
                     style="margin-top: 6px; padding:5px 10px; border-radius:6px; background:#8b5cf6; color:white; border:none; cursor:pointer;"
                   >
                     ❤️ Save
@@ -354,13 +354,13 @@ function initPanel() {
             amazonTitle: btn.dataset.amazontitle,
             amazonPrice: parseFloat(btn.dataset.amazonprice),
             amazonThumbnail: btn.dataset.amazonthumbnail,
-            amazonURL: btn.dataset.amazonurl,
+            amazonURL: decodeURIComponent(btn.dataset.amazonurl),
 
             // MATCH SIDE
             matchTitle: btn.dataset.matchtitle,
             matchPrice: parseFloat(btn.dataset.matchprice),
             matchThumbnail: btn.dataset.matchthumbnail,
-            matchURL: btn.dataset.matchurl
+            matchURL: decodeURIComponent(btn.dataset.matchurl)
           };
 
       
