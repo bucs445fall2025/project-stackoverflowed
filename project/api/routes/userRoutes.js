@@ -123,7 +123,7 @@ router.post("/save-product", authMiddleware, async (req, res) => {
 });
 
 router.get("/saved-products", authMiddleware, async (req, res) => {
-  const user = await User.findById(req.user.id);
+  const user = await User.findById(req.userId);
   res.json({ products: user.savedProducts });
 });
 
@@ -132,7 +132,7 @@ router.post("/remove-saved-products", authMiddleware, async (req, res) => {
   const { asins } = req.body;
 
   await User.updateOne(
-    { _id: req.user.id },
+    { _id: req.userId },
     { $pull: { savedProducts: { asin: { $in: asins } } } }
   );
 

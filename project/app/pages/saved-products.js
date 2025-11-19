@@ -21,18 +21,17 @@ export default function SavedProducts() {
   const [items, setItems] = useState([]);
   const [selected, setSelected] = useState(new Set());
 
-  const token =
-    typeof window !== "undefined" ? localStorage.getItem("authToken") : null;
-
   useEffect(() => {
-    if (!token) return;
-
+    const t = localStorage.getItem("authToken");
+    if (!t) return;
+  
     fetch(`${API_BASE}/api/users/saved-products`, {
-      headers: { Authorization: "Bearer " + token },
+      headers: { Authorization: "Bearer " + t },
     })
       .then((r) => r.json())
       .then((d) => setItems(d.products || []));
-  }, [token]);
+  }, []);
+  
 
   const toggleSelect = (asin) => {
     const s = new Set(selected);
