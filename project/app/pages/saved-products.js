@@ -45,7 +45,7 @@ export default function SavedProducts() {
     await fetch(`${API_BASE}/api/users/remove-saved-products`, {
       method: "POST",
       headers: {
-        Authorization: "Bearer " + token,
+        Authorization: "Bearer " + t,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ asins: Array.from(selected) }),
