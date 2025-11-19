@@ -123,7 +123,7 @@ router.post("/save-product", authMiddleware, async (req, res) => {
 });
 
 router.get("/saved-products", authMiddleware, async (req, res) => {
-  const user = await User.findById(req.userId);
+  const user = await User.findById(req.user.id);
   res.json({ products: user.savedProducts });
 });
 
