@@ -301,7 +301,7 @@ function initPanel() {
                     data-matchPrice="${dealPrice}"
                     data-matchThumbnail="${thumbDeal}"
                     data-matchurl="${encodeURIComponent(link)}"
-                    data-matchsource="${storeLabel}"
+                    data-matchsource="${deal.source_name}"
                     style="margin-top: 6px; padding:5px 10px; border-radius:6px; background:#8b5cf6; color:white; border:none; cursor:pointer;"
                   >
                     ❤️ Save
