@@ -886,6 +886,7 @@ async def _score_offers_for_extension(payload: ExtensionFullProduct, all_offers:
         best_deals.append({
             "merchant": o["merchant"],
             "source_domain": o.get("source_domain"),
+            "source_name": o.get("source_name"),
             "title": o["title"],
             "price": price,
             "url": o["url"],
