@@ -442,7 +442,7 @@ async def provider_google_image(image_url: str) -> list[Offer]:
         },
     )
 
-    results = data.get("visual_matches") or []
+    results = (data.get("visual_matches") or [])[:20]
     offers: list[Offer] = []
 
     for r in results:
@@ -595,7 +595,7 @@ async def find_deals_by_image(payload: ExtensionFullProduct):
         gshop_offers = await provider_google_shopping(query)
 
     # Combine all possible offers
-    all_offers = wm_offers + gshop_offers + gimg
+    all_offers = (wm_offers + gshop_offers + gimg)[:50]
 
     # Score / normalize savings using shared logic
     return await _score_offers_for_extension(payload, all_offers)
