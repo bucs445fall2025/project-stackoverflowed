@@ -480,7 +480,7 @@ async def provider_google_image(image_url: str) -> list[Offer]:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Walmart ingest (via SerpAPI)
+# Ingest matches
 # ──────────────────────────────────────────────────────────────────────────────
 
 async def walmart_search_page(query: str, page: int = 1):
@@ -607,10 +607,54 @@ async def find_deals_by_image(payload: ExtensionFullProduct):
     # Score / normalize savings using shared logic
     return await _score_offers_for_extension(payload, all_offers)
 
+class MerchantResolveReq(BaseModel):
+    source: str
+    title: str
+    fallback_url: Optional[str] = None
 
 
+@app.post("/extension/resolve-merchant-url")
+async def resolve_merchant_url(req: MerchantResolveReq):
+    """
+    Takes merchant source + product title and performs
+    SERP API Google Search to find real product page.
+    """
+    query = f"{req.source} {req.title}"
 
+    try:
+        data = await serp_get(
+            "https://serpapi.com/search.json",
+            {
+                "engine": "google",
+                "q": query,
+                "gl": "us",
+                "hl": "en",
+                "num": 10
+            },
+        )
+    except Exception:
+        return {"official_url": req.fallback_url}
 
+    organic = data.get("organic_results") or []
+    normalized_source = req.source.lower().replace(" ", "")
+
+    for r in organic:
+        link = r.get("link")
+        if not link:
+            continue
+
+        domain = extract_domain(link)
+        if not domain:
+            continue
+
+        # Normalize domain
+        cleaned = domain.replace(".", "").lower()
+
+        if normalized_source in cleaned:
+            return {"official_url": link}
+
+    # No match → fallback
+    return {"official_url": req.fallback_url}
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Brand / title matching helpers for Amazon
