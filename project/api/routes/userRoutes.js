@@ -108,18 +108,87 @@ function authMiddleware(req, res, next) {
 
 router.post("/save-product", authMiddleware, async (req, res) => {
   try {
-    const {asin, amazonTitle, amazonPrice, amazonThumbnail, amazonURL, matchTitle, matchPrice, matchThumbnail, matchURL} = req.body;
-    if (!asin) return res.status(400).json({ message: "ASIN required" });
+    const {
+      asin,
+      amazonTitle,
+      amazonPrice,
+      amazonThumbnail,
+      amazonURL,
+      matchSource,
+      matchTitle,
+      matchPrice,
+      matchThumbnail,
+      matchURL   // this is the Google Shopping link (fallback)
+    } = req.body;
+
+    if (!asin) {
+      return res.status(400).json({ message: "ASIN required" });
+    }
 
     const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
 
-    user.savedProducts.push({ asin, amazonTitle, amazonPrice, amazonThumbnail, amazonURL, matchTitle, matchPrice, matchThumbnail, matchURL });
+    // ---------------------------------------------------
+    // 1. CALL PYTHON BACKEND TO CLEAN UP THE URL
+    // ---------------------------------------------------
+    let officialURL = matchURL; // default fallback
+
+    try {
+      const pythonRes = await fetch(
+        "https://diligent-spontaneity-production-d286.up.railway.app/extension/resolve-merchant-url",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            source: matchSource,     // e.g. "Target"
+            title: matchTitle,       // e.g. "LEGO Architecture NYC"
+            fallback_url: matchURL   // backup
+          }),
+        }
+      );
+
+      const data = await pythonRes.json();
+      if (data && data.official_url) {
+        officialURL = data.official_url; // use clean link
+      }
+    } catch (err) {
+      console.error("Python URL resolution error:", err);
+      // fallback to matchURL
+    }
+
+    // ---------------------------------------------------
+    // 2. SAVE THE PRODUCT WITH CLEAN URL
+    // ---------------------------------------------------
+    user.savedProducts.push({
+      asin,
+      amazonTitle,
+      amazonPrice,
+      amazonThumbnail,
+      amazonURL,
+
+      matchSource,
+      matchTitle,
+      matchPrice,
+      matchThumbnail,
+
+      matchURL: officialURL  // <-- CLEAN REAL MERCHANT URL
+    });
+
     await user.save();
 
-    res.json({ success: true });
+    return res.json({ success: true });
+
   } catch (err) {
-    res.status(500).json({ message: "Error saving product" });
+    console.error("Save product error:", err);
+    return res.status(500).json({ message: "Error saving product" });
   }
+});
+
+router.get("/saved-products", authMiddleware, async (req, res) => {
+  const user = await User.findById(req.userId);
+  res.json({ products: user.savedProducts });
 });
 
 router.get("/saved-products", authMiddleware, async (req, res) => {
