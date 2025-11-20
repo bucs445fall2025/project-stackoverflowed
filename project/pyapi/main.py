@@ -488,6 +488,7 @@ async def walmart_search_page(query: str, page: int = 1):
     """
     Call SerpAPI's Walmart engine for a single search results page.
     """
+    print("Starting SERP GET")
     return await serp_get(
         "https://serpapi.com/search.json",
         {
@@ -500,6 +501,7 @@ async def walmart_search_page(query: str, page: int = 1):
             "no_cache": "true",
         },
     )
+    
 
 @app.post("/extension/find-walmart-deal")
 async def extension_find_walmart_deal(payload: ExtensionFullProduct):
@@ -901,6 +903,7 @@ async def walmart_scrape(req: WalmartScrapeReq, wm_coll: Optional[str] = Query(N
 
         try:
             data = await walmart_search_page(req.query, page=pg)
+            print("finished SERP GET")
             items = data.get("organic_results", []) or []
             pages_fetched += 1
         except HTTPException:
