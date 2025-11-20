@@ -1,63 +1,51 @@
-# Docker compose version
 version: "3.9"
 
-# Defining the containers 
 services:
-
+  # Frontend (Next.js)
   app:
-    build: ./app # (Bind mount) Build the docker image using the dockerfile inside the app/ folder
+    build: ./app
     ports:
-      - "3000:3000" # Expose container port 3000 to host so we can open the front end in a browser at localhost:3000
+      - "3000:3000"
     environment:
-      - REACT_APP_API_URL=http://api:5001 # Setting environment variablse inside the container
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:5001
     depends_on:
-      - api # Telling Docker to start the backend container list
+      - api
     volumes:
-       - ./app:/app # Mounts local app/ folder into the container at /app
-       - app_node_modules:/app/node_modules
+      - ./app:/app
+      - app_node_modules:/app/node_modules
 
+  # Node.js Backend
   api:
-    build: ./api # (Bind mount) Build the backend docker image using the dockerfile inside the api/ folder
+    build: ./api
     ports:
-      - "5001:5000" # Expose container port 5001 to host
-                    # Syntax: HostPort:ContainerPort
-                    # Host port is the port that'll be open in the browser/host machine
-                    # The port the app is listening on inside the container
+      - "5001:8080"
     environment:
-      - DB_HOST=db # Backend knows how to connect to MongoDB
-      - DB_PORT=27017
+      - NODE_ENV=development
+      - PORT=8080
+      - MONGO_URL=${MONGO_URL}  # From Railway, via .env file
+      - MONGO_DB=MongoDB
+      - PYAPI_URL=http://pyapi:8001
+      - JWT_SECRET=${JWT_SECRET}
+      - OPENAI_KEY=${OPENAI_KEY}
     depends_on:
-      - db # Ensure MongoDB starts first
+      - pyapi  
     volumes:
-      - ./api:/app # Mount local back end code into the container
+      - ./api:/app
       - api_node_modules:/app/node_modules
 
-  db:
-    image: mongo:7 # Use version 7
+  # Python Backend (FastAPI)
+  pyapi:
+    build: ./pyapi
     ports:
-      - "27017:27017" # Map container port to host. Can connect with a GUI
+      - "8001:8001"
+    environment:
+      - MONGO_URL=${MONGO_URL}  # Same Railway MongoDB URL
+      - MONGO_DB=MongoDB
+      - SERPAPI_KEY=${SERPAPI_KEY}
     volumes:
-      - mongo_data:/data/db # Persist MongoDB data outisde the container
+      - ./pyapi:/app
 
-  server:
-    image: nginx:latest # Use latest version
-    ports:
-      - "80:80" # Expose Nginx on host port 80
-    depends_on:
-      - app # Wait on front end and back end to start
-      - api
-
-# Defining a named docker volume for MongoDB
 volumes:
-  mongo_data:
   app_node_modules:
   api_node_modules:
-
-# A Volume is a way to persist data or share files between host machine and a container, or between containers
-#   Named volume: 
-#       - Docker manages storage location, good for databases
-#       - MongoDB writes its data to /data/db inside the container, but its 
-#         stored outside the container so it wont be lost if the container get deleted
-#   Bind mount: 
-#       - Maps a folder on host to the container, good for development
-#       - Changes made to the local files are reflected in the container
