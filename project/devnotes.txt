@@ -1,6 +1,6 @@
 CMD COMMANDS TO POPULATE:
 API="https://diligent-spontaneity-production-d286.up.railway.app"
-Check API searches remaining: curl "https://serpapi.com/account?api_key=YOUR_API_KEY"
+Check API searches remaining: curl "https://serpapi.com/account?api_key=bcaa2ba72e5094f3a230191d45098c4766383cfd51f3f094010ebc6908f628bf"
 
 
 curl -s -X POST "$API/amazon/index-by-title?wm_coll=wm_christmas&amz_coll=amz_christmas" \

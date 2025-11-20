@@ -395,6 +395,11 @@ async def provider_google_shopping(query: str) -> list[Offer]:
         },
     )
 
+    print("\n\n===== GOOGLE SHOPPING RAW RESPONSE =====")
+    import json
+    print(json.dumps(data, indent=2))
+    print("========================================\n\n")
+
     results = data.get("shopping_results") or []
     offers: list[Offer] = []
 
@@ -403,33 +408,39 @@ async def provider_google_shopping(query: str) -> list[Offer]:
         if price is None:
             continue
 
-        # Google Shopping always hides real URLs — keep it anyway
-        fake_url = r.get("product_link") or r.get("link") or None
-        if not fake_url:
+        # Prefer real store URL (product_link), fall back to Serp's link
+        raw_link = r.get("product_link") or r.get("link")
+
+        # Skip Google redirect URLs
+        if raw_link and "google.com/shopping" in raw_link:
+            continue  # don't include garbage Google redirect URLs
+
+        link = raw_link
+
+        if not link:
+            # No usable link → skip this one so frontend never sees empty url
             continue
 
-        # Extract readable merchant source name
         src = r.get("source")
         if isinstance(src, dict):
-            source_name = src.get("name") or ""
+            # SerpAPI sometimes puts store info in a dict
+            source_domain = src.get("link") or src.get("name")
         else:
-            source_name = src or ""
+            source_domain = src
 
         offers.append(
             {
                 "merchant": "google_shopping",
-                "source_name": source_name,         # <-- needed for resolver
-                "source_domain": extract_domain(fake_url),
+                "source_domain": extract_domain(link) or source_domain,
                 "title": r.get("title") or "",
                 "price": float(price),
-                "url": fake_url,                    # raw Google redirect
+                "url": link,
                 "thumbnail": r.get("thumbnail"),
                 "brand": r.get("brand"),
             }
         )
 
     return offers
-
 
 async def provider_google_image(image_url: str) -> list[Offer]:
     data = await serp_get(
@@ -442,7 +453,7 @@ async def provider_google_image(image_url: str) -> list[Offer]:
         },
     )
 
-    results = (data.get("visual_matches") or [])[:20]
+    results = data.get("visual_matches") or []
     offers: list[Offer] = []
 
     for r in results:
@@ -450,30 +461,26 @@ async def provider_google_image(image_url: str) -> list[Offer]:
         if price is None:
             continue
 
-        fake_url = r.get("product_link") or r.get("link") or None
-        if not fake_url:
+        link = r.get("product_link") or r.get("link")
+        if not link:
             continue
-
-        source_name = r.get("source") or ""
 
         offers.append(
             {
                 "merchant": "google_image",
-                "source_name": source_name,        # <-- important
-                "source_domain": extract_domain(fake_url),
+                "source_domain": extract_domain(link),
                 "title": r.get("title") or "",
                 "price": float(price),
-                "url": fake_url,
+                "url": link,
                 "thumbnail": r.get("thumbnail"),
-                "brand": r.get("source"),
+                "brand": r.get("source"),  # lens sometimes returns brand here
             }
         )
     return offers
 
 
-
 # ──────────────────────────────────────────────────────────────────────────────
-# Ingest matches
+# Walmart ingest (via SerpAPI)
 # ──────────────────────────────────────────────────────────────────────────────
 
 async def walmart_search_page(query: str, page: int = 1):
@@ -595,59 +602,15 @@ async def find_deals_by_image(payload: ExtensionFullProduct):
         gshop_offers = await provider_google_shopping(query)
 
     # Combine all possible offers
-    all_offers = (wm_offers + gshop_offers + gimg)[:50]
+    all_offers = wm_offers + gshop_offers + gimg
 
     # Score / normalize savings using shared logic
     return await _score_offers_for_extension(payload, all_offers)
 
-class MerchantResolveReq(BaseModel):
-    source: str
-    title: str
-    fallback_url: Optional[str] = None
 
 
-@app.post("/extension/resolve-merchant-url")
-async def resolve_merchant_url(req: MerchantResolveReq):
-    """
-    Takes merchant source + product title and performs
-    SERP API Google Search to find real product page.
-    """
-    query = f"{req.source} {req.title}"
 
-    try:
-        data = await serp_get(
-            "https://serpapi.com/search.json",
-            {
-                "engine": "google",
-                "q": query,
-                "gl": "us",
-                "hl": "en",
-                "num": 10
-            },
-        )
-    except Exception:
-        return {"official_url": req.fallback_url}
 
-    organic = data.get("organic_results") or []
-    normalized_source = req.source.lower().replace(" ", "")
-
-    for r in organic:
-        link = r.get("link")
-        if not link:
-            continue
-
-        domain = extract_domain(link)
-        if not domain:
-            continue
-
-        # Normalize domain
-        cleaned = domain.replace(".", "").lower()
-
-        if normalized_source in cleaned:
-            return {"official_url": link}
-
-    # No match → fallback
-    return {"official_url": req.fallback_url}
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Brand / title matching helpers for Amazon
@@ -886,7 +849,6 @@ async def _score_offers_for_extension(payload: ExtensionFullProduct, all_offers:
         best_deals.append({
             "merchant": o["merchant"],
             "source_domain": o.get("source_domain"),
-            "source_name": o.get("source_name"),
             "title": o["title"],
             "price": price,
             "url": o["url"],

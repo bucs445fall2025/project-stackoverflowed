@@ -245,8 +245,12 @@ function initPanel() {
           const titleText = deal.title || storeLabel;
           const thumbDeal = deal.thumbnail || thumb;
 
-          const titleHtml = `<span style="font-weight:600;">${titleText}</span>`;
-
+          const titleHtml = link
+            ? `<a href="${link}" target="_blank" rel="noreferrer"
+                   style="color:#e5e7eb;font-weight:600;text-decoration:underline;">
+                 ${titleText}
+               </a>`
+            : `<span style="font-weight:600;">${titleText}</span>`;
 
           return `
             <div style="
@@ -301,7 +305,6 @@ function initPanel() {
                     data-matchPrice="${dealPrice}"
                     data-matchThumbnail="${thumbDeal}"
                     data-matchurl="${encodeURIComponent(link)}"
-                    data-matchsource="${deal.source_name}"
                     style="margin-top: 6px; padding:5px 10px; border-radius:6px; background:#8b5cf6; color:white; border:none; cursor:pointer;"
                   >
                     ❤️ Save
@@ -335,11 +338,7 @@ function initPanel() {
       //---------------------------------------------------
       document.querySelectorAll(".save-btn").forEach(btn => {
         btn.addEventListener("click", async () => {
-          
-          btn.disabled = true;
-          const originalText = btn.innerHTML;
-          btn.innerHTML = "⏳ Saving...";
-
+      
           const { authToken } = await chrome.storage.sync.get("authToken");
       
           if (!authToken) {
@@ -361,8 +360,7 @@ function initPanel() {
             matchTitle: btn.dataset.matchtitle,
             matchPrice: parseFloat(btn.dataset.matchprice),
             matchThumbnail: btn.dataset.matchthumbnail,
-            matchURL: decodeURIComponent(btn.dataset.matchurl),
-            matchSource: btn.dataset.matchsource
+            matchURL: decodeURIComponent(btn.dataset.matchurl)
           };
 
       
@@ -374,8 +372,7 @@ function initPanel() {
             },
             body: JSON.stringify(body)
           });
-          btn.disabled = false;
-          btn.innerHTML = originalText;
+      
           alert("Saved!");
         });
       });
@@ -394,4 +391,3 @@ function initPanel() {
 
 initPanel();
 initAuthListeners();
-
