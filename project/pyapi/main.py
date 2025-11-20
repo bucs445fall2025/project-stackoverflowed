@@ -395,11 +395,6 @@ async def provider_google_shopping(query: str) -> list[Offer]:
         },
     )
 
-    print("\n\n===== GOOGLE SHOPPING RAW RESPONSE =====")
-    import json
-    print(json.dumps(data, indent=2))
-    print("========================================\n\n")
-
     results = data.get("shopping_results") or []
     offers: list[Offer] = []
 
@@ -408,39 +403,33 @@ async def provider_google_shopping(query: str) -> list[Offer]:
         if price is None:
             continue
 
-        # Prefer real store URL (product_link), fall back to Serp's link
-        raw_link = r.get("product_link") or r.get("link")
-
-        # Skip Google redirect URLs
-        if raw_link and "google.com/shopping" in raw_link:
-            continue  # don't include garbage Google redirect URLs
-
-        link = raw_link
-
-        if not link:
-            # No usable link → skip this one so frontend never sees empty url
+        # Google Shopping always hides real URLs — keep it anyway
+        fake_url = r.get("product_link") or r.get("link") or None
+        if not fake_url:
             continue
 
+        # Extract readable merchant source name
         src = r.get("source")
         if isinstance(src, dict):
-            # SerpAPI sometimes puts store info in a dict
-            source_domain = src.get("link") or src.get("name")
+            source_name = src.get("name") or ""
         else:
-            source_domain = src
+            source_name = src or ""
 
         offers.append(
             {
                 "merchant": "google_shopping",
-                "source_domain": extract_domain(link) or source_domain,
+                "source_name": source_name,         # <-- needed for resolver
+                "source_domain": extract_domain(fake_url),
                 "title": r.get("title") or "",
                 "price": float(price),
-                "url": link,
+                "url": fake_url,                    # raw Google redirect
                 "thumbnail": r.get("thumbnail"),
                 "brand": r.get("brand"),
             }
         )
 
     return offers
+
 
 async def provider_google_image(image_url: str) -> list[Offer]:
     data = await serp_get(
@@ -461,22 +450,26 @@ async def provider_google_image(image_url: str) -> list[Offer]:
         if price is None:
             continue
 
-        link = r.get("product_link") or r.get("link")
-        if not link:
+        fake_url = r.get("product_link") or r.get("link") or None
+        if not fake_url:
             continue
+
+        source_name = r.get("source") or ""
 
         offers.append(
             {
                 "merchant": "google_image",
-                "source_domain": extract_domain(link),
+                "source_name": source_name,        # <-- important
+                "source_domain": extract_domain(fake_url),
                 "title": r.get("title") or "",
                 "price": float(price),
-                "url": link,
+                "url": fake_url,
                 "thumbnail": r.get("thumbnail"),
-                "brand": r.get("source"),  # lens sometimes returns brand here
+                "brand": r.get("source"),
             }
         )
     return offers
+
 
 
 # ──────────────────────────────────────────────────────────────────────────────
