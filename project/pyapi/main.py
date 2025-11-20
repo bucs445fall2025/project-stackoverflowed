@@ -906,8 +906,16 @@ async def walmart_scrape(req: WalmartScrapeReq, wm_coll: Optional[str] = Query(N
             print("finished SERP GET")
             items = data.get("organic_results", []) or []
             pages_fetched += 1
-        except HTTPException:
-            # If a page fails (e.g. SerpAPI issue), log it and move on
+        except HTTPException as e:
+            # Log the full error details
+            print("SERPAPI ERROR during walmart_search_page:")
+            print(f"  Status: {e.status_code}")
+            print(f"  Detail: {e.detail}")
+
+            # Optional: print full traceback
+            import traceback
+            traceback.print_exc()
+
             page_errors += 1
             await asyncio.sleep(1.0 + random.random())
             continue
