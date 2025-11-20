@@ -1,14 +1,16 @@
 ## **Backend**
-- **Python (Alpine)** → [python:3.12-alpine](https://hub.docker.com/_/python)
+- **Python (Apline)** → [python:3.12-alpine](https://hub.docker.com/_/python)
+- **Node.js (Express)** →  [node:18-alpine](https://hub.docker.com/_/node)
 
 ## **Web Server**
-- **Nginx** → [nginx:latest](https://hub.docker.com/_/nginx)
+- **Railway** → [](https://railway.app)
 
 ## **Database**
-- **PostgreSQL** → [postgres:15](https://hub.docker.com/_/postgres)
+- **MongoDB** → [mongo:latest](https://hub.docker.com/_/mongo)
 
 ## **Cache**
-- **Redis** → [redis:latest](https://hub.docker.com/_/redis)
+- (None currently in use)
 
 ## **Additional Dependencies**
-- Any other dependencies can be listed here, such as Celery, Node.js, or worker services.
+- Chrome Extension: Interacts with Python and Node API's for product lookup, Google Shopping scraping, and storage
+- Hosting Platform: All services deployed on Railway (Python API, Node API, MongoDB, and React)
