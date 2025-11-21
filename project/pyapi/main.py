@@ -458,7 +458,7 @@ async def provider_google_image(image_url: str) -> list[Offer]:
     offers: list[Offer] = []
 
     for r in results:
-        price = parse_price(r.get("price") or r.get("extracted_price"))
+        price = parse_price(r.get("price") or r.get("extracted_price"))     
         if price is None:
             continue
 
