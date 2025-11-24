@@ -4,10 +4,10 @@ export default function NavBar({ onSignOut }) {
   const router = useRouter();
 
   const items = [
-    { label: "Deal Finder", path: "/dashboard" },
+    { label: "Product Finder", path: "/dashboard" },
     { label: "Amazon Dashboard", path: "/amazon-dashboard" },
     { label: "Chat Bot", path: "/chat-bot" },
-    { label: "Saved", path: "/saved-products" },
+    { label: "Saved Products", path: "/saved-products" },
   ];
 
   return (
