@@ -117,7 +117,8 @@ export default function Dashboard() {
           body: JSON.stringify({
             source_domain: payload.matchSourceDomain,
             title: payload.matchTitle,
-            expected_price: payload.matchPrice
+            expected_price: payload.matchPrice,
+            fallback_shopping_link: payload.matchShoppingLink
           }),
         }
       );
@@ -348,7 +349,8 @@ export default function Dashboard() {
                                   matchTitle: offer.title,
                                   matchPrice: gsPrice,
                                   matchThumbnail: gsThumb,
-                                  matchSourceDomain: offer.source_domain
+                                  matchSourceDomain: offer.source_domain,
+                                  matchShoppingLink: offer.url
                                 })
                               }
                               style={{
