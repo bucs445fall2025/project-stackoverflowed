@@ -1,0 +1,33 @@
+body {
+    margin: 0;
+    font-family: system-ui, sans-serif;
+    background: #1c0333;
+    color: white;
+  }
+  
+  #login-box {
+    padding: 20px;
+  }
+  
+  input {
+    width: 100%;
+    padding: 12px;
+    margin-top: 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.25);
+    background: rgba(15,23,42,0.4);
+    color: white;
+  }
+  
+  button {
+    margin-top: 16px;
+    width: 100%;
+    padding: 12px;
+    border-radius: 999px;
+    border: none;
+    background: linear-gradient(135deg, #a855f7, #4c1d95);
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  

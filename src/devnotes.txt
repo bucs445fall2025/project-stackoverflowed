@@ -1,0 +1,16 @@
+CMD COMMANDS TO POPULATE:
+API="https://diligent-spontaneity-production-d286.up.railway.app"
+Check API searches remaining: curl "https://serpapi.com/account?api_key=d3abd377f47b16aa93480d85560cfad078571ca4ecdd4d07af094b61b7751a8e"
+
+RUN PYTHON ROUTES FOR CATEGORY TO CATEGORY SCRAPING:
+export PYAPI_URL="https://diligent-spontaneity-production-d286.up.railway.app"
+
+Clear a category:
+curl -X DELETE "$PYAPI_URL/debug/clear-category?match_coll=wm_christmas"
+
+curl -X POST "$PYAPI_URL/amazon/scrape-category?amz_coll=amz_health_and_wellness" \
+     -H "Content-Type: application/json" \
+     -d '{"query": "health and wellness", "pages": 4, "max_products": 100}'
+
+
+curl -X POST "$PYAPI_URL/google-shopping/index-by-title?amz_coll=amz_health_and_wellness&match_coll=match_health_and_wellness" 

@@ -1,0 +1,37 @@
+:root {
+    --card-bg: rgba(22, 16, 34, 0.78);
+    --panel-bg: rgba(13, 15, 26, 0.95);
+    --panel-border: rgba(255, 255, 255, 0.08);
+    --muted: rgba(255, 255, 255, 0.75);
+    --accent: #a78bfa;
+  }
+  
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    font-family: "Space Grotesk", sans-serif;
+    background: radial-gradient(800px 600px at 30% -20%, #4b1d7a 0%, transparent 60%),
+                radial-gradient(800px 600px at 70% -10%, #2a0c52 0%, transparent 60%),
+                #1c0333;
+    color: #fff;
+    overflow-y: auto;
+  }
+  
+  #app {
+    display: flex;
+    flex-direction: column;
+    padding: 18px;
+    height: 100%;
+    box-sizing: border-box;
+  }
+  
+  .card {
+    background: var(--card-bg);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--panel-border);
+    border-radius: 14px;
+    padding: 16px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.45);
+  }
+  

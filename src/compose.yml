@@ -1,0 +1,51 @@
+version: "3.9"
+
+services:
+  # Frontend (Next.js)
+  app:
+    build: ./app
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:5001
+    depends_on:
+      - api
+    volumes:
+      - ./app:/app
+      - app_node_modules:/app/node_modules
+
+  # Node.js Backend
+  api:
+    build: ./api
+    ports:
+      - "5001:8080"
+    environment:
+      - NODE_ENV=development
+      - PORT=8080
+      - MONGO_URL=${MONGO_URL}  # From Railway, via .env file
+      - MONGO_DB=MongoDB
+      - PYAPI_URL=http://pyapi:8001
+      - JWT_SECRET=${JWT_SECRET}
+      - OPENAI_KEY=${OPENAI_KEY}
+    depends_on:
+      - pyapi  
+    volumes:
+      - ./api:/app
+      - api_node_modules:/app/node_modules
+
+  # Python Backend (FastAPI)
+  pyapi:
+    build: ./pyapi
+    ports:
+      - "8001:8001"
+    environment:
+      - MONGO_URL=${MONGO_URL}  # Same Railway MongoDB URL
+      - MONGO_DB=MongoDB
+      - SERPAPI_KEY=${SERPAPI_KEY}
+    volumes:
+      - ./pyapi:/app
+
+volumes:
+  app_node_modules:
+  api_node_modules:
