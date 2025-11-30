@@ -3,8 +3,8 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const connectDB = require("./config/db");
-
 const app = express();
+
 app.use(cors({ origin: "*" }));
 app.use(express.json());
 
@@ -23,9 +23,6 @@ app.use("/api", debugRoutes); // /api/db/debug, /api/users/debug, /api/users/exi
 // User auth routes
 const userRoutes = require("./routes/userRoutes");
 app.use("/api/users", userRoutes);
-
-// const ExtensionPanel = require("./routes/extensionRoutes")
-// app.use("/api/extension-panel", ExtensionPanel);
 
 // Health check
 app.get("/", (_req, res) => res.send("Backend running"));
